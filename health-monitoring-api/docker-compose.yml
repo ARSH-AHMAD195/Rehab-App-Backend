@@ -1,0 +1,26 @@
+# Single-node MongoDB replica set. The replica set is required: the save flow in
+# API reference v1.1 ("Save flow: what happens when", step 6) writes the daily log,
+# alerts, audit entries and outbox events in one transaction, and MongoDB only
+# supports multi-document transactions on a replica set.
+services:
+  mongo:
+    image: mongo:7
+    container_name: ffs-health-mongo
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      # Initiates the replica set on first boot, then reports healthy.
+      test: >
+        mongosh --quiet --eval "
+          try { rs.status().ok }
+          catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'localhost:27017'}]}).ok }
+        "
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+volumes:
+  mongo-data:

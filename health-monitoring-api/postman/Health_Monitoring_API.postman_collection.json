@@ -1,0 +1,1800 @@
+{
+  "info": {
+    "name": "Health Monitoring API v1.1",
+    "description": "Fit for Surgery - Health Monitoring module. Implements API reference v1.1.\n\nRun the folders in order with the Collection Runner: 0 Login, 1 Admin setup, 2 Patient, 3 Doctor, 4 Error cases.\nEach request has automatic checks (Tests tab). Select the \"Health Monitoring - Local\" environment first.\n\nDates: {{today}} and {{yesterday}} are worked out before every request in the Asia/Kolkata time zone, the seeded patients' zone.\nThe alert limits set in folder 1 are placeholders for testing only; real limits are pending the clinical team.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// The patient's today and yesterday, in Asia/Kolkata (UTC+05:30, no daylight saving).",
+          "const ist = new Date(Date.now() + 330 * 60 * 1000);",
+          "pm.variables.set('today', ist.toISOString().slice(0, 10));",
+          "pm.variables.set('yesterday', new Date(ist.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10));"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Login (Firebase)",
+      "description": "Gets a Firebase ID token for each test user and stores it in the environment. Tokens last 1 hour; run this folder again after that.",
+      "item": [
+        {
+          "name": "Login as patient (Rajesh Iyer)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Firebase sign-in succeeded', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('got an ID token', () => pm.expect(json.idToken).to.be.a('string'));",
+                  "if (json.idToken) pm.environment.set('tokenPatient', json.idToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={{firebaseApiKey}}",
+              "protocol": "https",
+              "host": [
+                "identitytoolkit",
+                "googleapis",
+                "com"
+              ],
+              "path": [
+                "v1",
+                "accounts:signInWithPassword"
+              ],
+              "query": [
+                {
+                  "key": "key",
+                  "value": "{{firebaseApiKey}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{patientEmail}}\",\n  \"password\": \"{{testPassword}}\",\n  \"returnSecureToken\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Login as doctor (Dr Meera Nair)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Firebase sign-in succeeded', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('got an ID token', () => pm.expect(json.idToken).to.be.a('string'));",
+                  "if (json.idToken) pm.environment.set('tokenDoctor', json.idToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={{firebaseApiKey}}",
+              "protocol": "https",
+              "host": [
+                "identitytoolkit",
+                "googleapis",
+                "com"
+              ],
+              "path": [
+                "v1",
+                "accounts:signInWithPassword"
+              ],
+              "query": [
+                {
+                  "key": "key",
+                  "value": "{{firebaseApiKey}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{doctorEmail}}\",\n  \"password\": \"{{testPassword}}\",\n  \"returnSecureToken\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Login as admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Firebase sign-in succeeded', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('got an ID token', () => pm.expect(json.idToken).to.be.a('string'));",
+                  "if (json.idToken) pm.environment.set('tokenAdmin', json.idToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={{firebaseApiKey}}",
+              "protocol": "https",
+              "host": [
+                "identitytoolkit",
+                "googleapis",
+                "com"
+              ],
+              "path": [
+                "v1",
+                "accounts:signInWithPassword"
+              ],
+              "query": [
+                {
+                  "key": "key",
+                  "value": "{{firebaseApiKey}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{testPassword}}\",\n  \"returnSecureToken\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "auth": {
+        "type": "noauth"
+      }
+    },
+    {
+      "name": "1. Admin setup",
+      "description": "Admin sets the alert limits the patient and doctor steps rely on.",
+      "item": [
+        {
+          "name": "Set PAIN alert limit (global, above 6)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const t = pm.response.json();",
+                  "pm.test('limit saved for PAIN, high 6', () => { pm.expect(t.type).to.eql('PAIN'); pm.expect(t.high).to.eql(6); });",
+                  "pm.test('limit is versioned', () => pm.expect(t.version).to.be.at.least(1));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/alert-thresholds/PAIN",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "alert-thresholds",
+                "PAIN"
+              ]
+            },
+            "description": "Placeholder limit for testing only. Real limits are pending the clinical team (v1.1 Open questions).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"field\": null,\n  \"low\": null,\n  \"high\": 6,\n  \"severity\": \"MEDIUM\",\n  \"patientId\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Set BP systolic alert limit (above 140)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const t = pm.response.json();",
+                  "pm.test('limit is per BP field', () => { pm.expect(t.type).to.eql('BP'); pm.expect(t.field).to.eql('systolic'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/alert-thresholds/BP",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "alert-thresholds",
+                "BP"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"field\": \"systolic\",\n  \"low\": null,\n  \"high\": 140,\n  \"severity\": \"HIGH\",\n  \"patientId\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List alert limits",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test('PAIN limit is listed', () => pm.expect(res.data.map(t => t.type)).to.include('PAIN'));",
+                  "pm.test('has nextCursor', () => pm.expect(res).to.have.property('nextCursor'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/alert-thresholds",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "alert-thresholds"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update a parameter (SLEEP_HRS label)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const v = pm.response.json();",
+                  "pm.test('label updated', () => pm.expect(v.label).to.eql('Sleep duration'));",
+                  "pm.test('version increased', () => pm.expect(v.version).to.be.at.least(2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/vital-types/SLEEP_HRS",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "vital-types",
+                "SLEEP_HRS"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Sleep duration\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{tokenAdmin}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "2. Patient",
+      "description": "Patient fills in today's log, raises a PAIN alert, and reads logs and trends.",
+      "item": [
+        {
+          "name": "Get parameters (form definition)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const types = pm.response.json().data;",
+                  "pm.test('13 parameters', () => pm.expect(types.length).to.eql(13));",
+                  "const bp = types.find(t => t.type === 'BP');",
+                  "pm.test('BP has a range per field', () => { pm.expect(bp.fields.systolic).to.have.property('minValid'); pm.expect(bp.fields.diastolic).to.have.property('maxValid'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vital-types",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vital-types"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get today's log",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const log = pm.response.json();",
+                  "pm.test(\"date is the patient's today\", () => pm.expect(log.date).to.eql(pm.variables.get('today')));",
+                  "pm.test('all 13 parameters returned', () => pm.expect(Object.keys(log.readings).length).to.eql(13));",
+                  "pm.test('totalCount is 14', () => pm.expect(log.totalCount).to.eql(14));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/me/vitals/today",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "vitals",
+                "today"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Clear PAIN (so the run can be repeated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('PAIN is back to NOT_YET', () => pm.expect(pm.response.json().readings.PAIN.status).to.eql('NOT_YET'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/vitals/today",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "vitals",
+                "today"
+              ]
+            },
+            "description": "Sending null clears a value. Done first so the save below always counts as a change and raises an alert, even on a second run the same day.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"{{today}}\",\n  \"readings\": {\n    \"PAIN\": null\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Save today's readings (pain 7 raises an alert)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const log = pm.response.json();",
+                  "pm.test('12 parameters logged = 13 of 14 fields (sugar skipped)', () => pm.expect(log.filledCount).to.eql(13));",
+                  "pm.test('day is IN_PROGRESS', () => pm.expect(log.dayStatus).to.eql('IN_PROGRESS'));",
+                  "pm.test('BP saved', () => pm.expect(log.readings.BP.value).to.eql({ systolic: 128, diastolic: 82 }));",
+                  "pm.test('mood 4 is labelled Good', () => pm.expect(log.readings.MOOD.label).to.eql('Good'));",
+                  "pm.test('server set loggedAt with offset', () => pm.expect(log.readings.PAIN.loggedAt).to.match(/[+-]\\d{2}:\\d{2}$/));",
+                  "const alert = (log.alerts || []).find(a => a.type === 'PAIN');",
+                  "pm.test('PAIN alert raised (above 6)', () => { pm.expect(alert).to.be.an('object'); pm.expect(alert.rule).to.eql('ABOVE_HIGH'); pm.expect(alert.status).to.eql('OPEN'); });",
+                  "if (alert) pm.environment.set('alertId', alert.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/vitals/today",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "vitals",
+                "today"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"{{today}}\",\n  \"readings\": {\n    \"BP\": {\n      \"systolic\": 128,\n      \"diastolic\": 82\n    },\n    \"PULSE\": {\n      \"num\": 76\n    },\n    \"SPO2\": {\n      \"num\": 97\n    },\n    \"TEMP\": {\n      \"num\": 36.8\n    },\n    \"WEIGHT\": {\n      \"num\": 56\n    },\n    \"PAIN\": {\n      \"num\": 7\n    },\n    \"WALK_MIN\": {\n      \"num\": 20\n    },\n    \"STEPS\": {\n      \"num\": 5000\n    },\n    \"SLEEP_HRS\": {\n      \"num\": 7.5\n    },\n    \"NUTRITION\": {\n      \"text\": \"Oats for breakfast, dal and rice for lunch, fruit\"\n    },\n    \"WATER_ML\": {\n      \"num\": 2000\n    },\n    \"MOOD\": {\n      \"num\": 4\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Retry the same save (must change nothing)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('no new alerts', () => pm.expect(pm.response.json().alerts).to.eql([]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/vitals/today",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "vitals",
+                "today"
+              ]
+            },
+            "description": "v1.1 Duplicates and retries: re-sending the same body is a no-op, so no new alert.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"{{today}}\",\n  \"readings\": {\n    \"BP\": {\n      \"systolic\": 128,\n      \"diastolic\": 82\n    },\n    \"PULSE\": {\n      \"num\": 76\n    },\n    \"SPO2\": {\n      \"num\": 97\n    },\n    \"TEMP\": {\n      \"num\": 36.8\n    },\n    \"WEIGHT\": {\n      \"num\": 56\n    },\n    \"PAIN\": {\n      \"num\": 7\n    },\n    \"WALK_MIN\": {\n      \"num\": 20\n    },\n    \"STEPS\": {\n      \"num\": 5000\n    },\n    \"SLEEP_HRS\": {\n      \"num\": 7.5\n    },\n    \"NUTRITION\": {\n      \"text\": \"Oats for breakfast, dal and rice for lunch, fruit\"\n    },\n    \"WATER_ML\": {\n      \"num\": 2000\n    },\n    \"MOOD\": {\n      \"num\": 4\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Get past logs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test('today is in the list', () => pm.expect(res.data.map(l => l.date)).to.include(pm.variables.get('today')));",
+                  "pm.test('has nextCursor', () => pm.expect(res).to.have.property('nextCursor'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/me/vitals/logs?limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "vitals",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get pulse trend (7 days)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const t = pm.response.json();",
+                  "pm.test('7 labels and 7 values', () => { pm.expect(t.labels.length).to.eql(7); pm.expect(t.values.length).to.eql(7); });",
+                  "pm.test(\"today's value is 76\", () => pm.expect(t.values[6]).to.eql(76));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/me/vitals/trends?type=PULSE&period=7d",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "vitals",
+                "trends"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "PULSE"
+                },
+                {
+                  "key": "period",
+                  "value": "7d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get BP trend (30 days)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const t = pm.response.json();",
+                  "pm.test('separate systolic and diastolic series', () => { pm.expect(t.systolic.length).to.eql(30); pm.expect(t.diastolic.length).to.eql(30); });",
+                  "pm.test('systolic limit 140 shown', () => pm.expect(t.thresholds.systolic.high).to.eql(140));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/me/vitals/trends?type=BP&period=30d",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "vitals",
+                "trends"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "BP"
+                },
+                {
+                  "key": "period",
+                  "value": "30d"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{tokenPatient}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "3. Doctor",
+      "description": "Doctor finds the alert, views the patient, and acknowledges it.",
+      "item": [
+        {
+          "name": "List open alerts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const alert = pm.response.json().data.find(a => a.id === pm.environment.get('alertId'));",
+                  "pm.test(\"the patient's PAIN alert is in the queue\", () => pm.expect(alert).to.be.an('object'));",
+                  "if (alert) {",
+                  "  pm.environment.set('patientId', alert.patient.id);",
+                  "  pm.test('alert shows patient name and current value', () => { pm.expect(alert.patient.name).to.be.a('string'); pm.expect(alert.currentValue).to.eql({ num: 7 }); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/doctor/alerts?limit=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctor",
+                "alerts"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "100"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Patient's log for today",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('sees the pain value', () => pm.expect(pm.response.json().readings.PAIN.value).to.eql({ num: 7 }));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/doctor/patients/{{patientId}}/vitals/today",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctor",
+                "patients",
+                "{{patientId}}",
+                "vitals",
+                "today"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Patient's past logs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returns a list', () => pm.expect(pm.response.json().data).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/doctor/patients/{{patientId}}/vitals/logs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctor",
+                "patients",
+                "{{patientId}}",
+                "vitals",
+                "logs"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Patient's pain trend",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const t = pm.response.json();",
+                  "pm.test(\"today's pain is 7\", () => pm.expect(t.values[6]).to.eql(7));",
+                  "pm.test('pain limit 6 shown', () => pm.expect(t.thresholds.high).to.eql(6));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/doctor/patients/{{patientId}}/vitals/trends?type=PAIN&period=7d",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctor",
+                "patients",
+                "{{patientId}}",
+                "vitals",
+                "trends"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "PAIN"
+                },
+                {
+                  "key": "period",
+                  "value": "7d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Acknowledge the alert",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const a = pm.response.json();",
+                  "pm.test('alert is ACKNOWLEDGED', () => pm.expect(a.status).to.eql('ACKNOWLEDGED'));",
+                  "pm.test('acknowledgedBy and acknowledgedAt set', () => { pm.expect(a.acknowledgedBy).to.be.a('string'); pm.expect(a.acknowledgedAt).to.be.a('string'); });",
+                  "pm.test('note saved', () => pm.expect(a.note).to.eql('Called patient, pain settled after rest'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/doctor/alerts/{{alertId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctor",
+                "alerts",
+                "{{alertId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACKNOWLEDGED\",\n  \"note\": \"Called patient, pain settled after rest\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List acknowledged alerts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('the alert is now acknowledged', () => pm.expect(pm.response.json().data.map(a => a.id)).to.include(pm.environment.get('alertId')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/doctor/alerts?status=ACKNOWLEDGED&limit=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctor",
+                "alerts"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "ACKNOWLEDGED"
+                },
+                {
+                  "key": "limit",
+                  "value": "100"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{tokenDoctor}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "4. Error cases",
+      "description": "Each request should fail with the documented status and error code.",
+      "item": [
+        {
+          "name": "401 - no token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test('error code is UNAUTHENTICATED', () => pm.expect(body.code).to.eql('UNAUTHENTICATED'));",
+                  "pm.test('error has requestId', () => pm.expect(body.requestId).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vital-types",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vital-types"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "401 - invalid token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test('error code is UNAUTHENTICATED', () => pm.expect(body.code).to.eql('UNAUTHENTICATED'));",
+                  "pm.test('error has requestId', () => pm.expect(body.requestId).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vital-types",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vital-types"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "not-a-real-token",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "403 - patient opens doctor alerts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 403', () => pm.response.to.have.status(403));",
+                  "const body = pm.response.json();",
+                  "pm.test('error code is FORBIDDEN_ROLE', () => pm.expect(body.code).to.eql('FORBIDDEN_ROLE'));",
+                  "pm.test('error has requestId', () => pm.expect(body.requestId).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/doctor/alerts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctor",
+                "alerts"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenPatient}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "403 - patient opens admin route",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 403', () => pm.response.to.have.status(403));",
+                  "const body = pm.response.json();",
+                  "pm.test('error code is FORBIDDEN_ROLE', () => pm.expect(body.code).to.eql('FORBIDDEN_ROLE'));",
+                  "pm.test('error has requestId', () => pm.expect(body.requestId).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/alert-thresholds",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "alert-thresholds"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenPatient}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "403 - doctor saves a patient's readings",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 403', () => pm.response.to.have.status(403));",
+                  "const body = pm.response.json();",
+                  "pm.test('error code is FORBIDDEN_ROLE', () => pm.expect(body.code).to.eql('FORBIDDEN_ROLE'));",
+                  "pm.test('error has requestId', () => pm.expect(body.requestId).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/vitals/today",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "vitals",
+                "today"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenDoctor}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"{{today}}\",\n  \"readings\": {\n    \"PULSE\": {\n      \"num\": 80\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "404 - doctor opens a patient not linked to them",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', () => pm.response.to.have.status(404));",
+                  "const body = pm.response.json();",
+                  "pm.test('error code is NOT_FOUND', () => pm.expect(body.code).to.eql('NOT_FOUND'));",
+                  "pm.test('error has requestId', () => pm.expect(body.requestId).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/doctor/patients/000000000000000000000000/vitals/today",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctor",
+                "patients",
+                "000000000000000000000000",
+                "vitals",
+                "today"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenDoctor}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "409 - save for a day that is not today",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 409', () => pm.response.to.have.status(409));",
+                  "const body = pm.response.json();",
+                  "pm.test('error code is DAY_CHANGED', () => pm.expect(body.code).to.eql('DAY_CHANGED'));",
+                  "pm.test('error has requestId', () => pm.expect(body.requestId).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/vitals/today",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "vitals",
+                "today"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenPatient}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"{{yesterday}}\",\n  \"readings\": {\n    \"PULSE\": {\n      \"num\": 80\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "400 - value out of range (SpO2 150)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('error code is VALIDATION_FAILED', () => pm.expect(body.code).to.eql('VALIDATION_FAILED'));",
+                  "pm.test('error has requestId', () => pm.expect(body.requestId).to.be.a('string'));",
+                  "pm.test('detail code is OUT_OF_RANGE', () => pm.expect((body.details || []).map(d => d.code)).to.include('OUT_OF_RANGE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/vitals/today",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "vitals",
+                "today"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenPatient}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"{{today}}\",\n  \"readings\": {\n    \"SPO2\": {\n      \"num\": 150\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "400 - BP systolic not above diastolic",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('error code is VALIDATION_FAILED', () => pm.expect(body.code).to.eql('VALIDATION_FAILED'));",
+                  "pm.test('error has requestId', () => pm.expect(body.requestId).to.be.a('string'));",
+                  "pm.test('detail code is BP_SYSTOLIC_NOT_ABOVE_DIASTOLIC', () => pm.expect((body.details || []).map(d => d.code)).to.include('BP_SYSTOLIC_NOT_ABOVE_DIASTOLIC'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/vitals/today",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "vitals",
+                "today"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenPatient}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"{{today}}\",\n  \"readings\": {\n    \"BP\": {\n      \"systolic\": 80,\n      \"diastolic\": 90\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "400 - pain must be a whole number",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('error code is VALIDATION_FAILED', () => pm.expect(body.code).to.eql('VALIDATION_FAILED'));",
+                  "pm.test('error has requestId', () => pm.expect(body.requestId).to.be.a('string'));",
+                  "pm.test('detail code is WRONG_SHAPE', () => pm.expect((body.details || []).map(d => d.code)).to.include('WRONG_SHAPE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/vitals/today",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "vitals",
+                "today"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenPatient}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"{{today}}\",\n  \"readings\": {\n    \"PAIN\": {\n      \"num\": 7.5\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "400 - empty readings",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('error code is VALIDATION_FAILED', () => pm.expect(body.code).to.eql('VALIDATION_FAILED'));",
+                  "pm.test('error has requestId', () => pm.expect(body.requestId).to.be.a('string'));",
+                  "pm.test('detail code is EMPTY_READINGS', () => pm.expect((body.details || []).map(d => d.code)).to.include('EMPTY_READINGS'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/vitals/today",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "vitals",
+                "today"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenPatient}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"{{today}}\",\n  \"readings\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "400 - unknown parameter",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('error code is VALIDATION_FAILED', () => pm.expect(body.code).to.eql('VALIDATION_FAILED'));",
+                  "pm.test('error has requestId', () => pm.expect(body.requestId).to.be.a('string'));",
+                  "pm.test('detail code is UNKNOWN_TYPE', () => pm.expect((body.details || []).map(d => d.code)).to.include('UNKNOWN_TYPE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/vitals/today",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "vitals",
+                "today"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenPatient}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"{{today}}\",\n  \"readings\": {\n    \"HEIGHT\": {\n      \"num\": 170\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "400 - trend for NUTRITION (free text)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('error code is VALIDATION_FAILED', () => pm.expect(body.code).to.eql('VALIDATION_FAILED'));",
+                  "pm.test('error has requestId', () => pm.expect(body.requestId).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/me/vitals/trends?type=NUTRITION",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "vitals",
+                "trends"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "NUTRITION"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenPatient}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "400 - alert limit with low above high",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('error code is VALIDATION_FAILED', () => pm.expect(body.code).to.eql('VALIDATION_FAILED'));",
+                  "pm.test('error has requestId', () => pm.expect(body.requestId).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/alert-thresholds/PULSE",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "alert-thresholds",
+                "PULSE"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenAdmin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"field\": null,\n  \"low\": 110,\n  \"high\": 50,\n  \"severity\": \"MEDIUM\",\n  \"patientId\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "400 - acknowledge with a status other than ACKNOWLEDGED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('error code is VALIDATION_FAILED', () => pm.expect(body.code).to.eql('VALIDATION_FAILED'));",
+                  "pm.test('error has requestId', () => pm.expect(body.requestId).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/doctor/alerts/{{alertId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctor",
+                "alerts",
+                "{{alertId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenDoctor}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"OPEN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "409 - acknowledge the same alert twice",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 409', () => pm.response.to.have.status(409));",
+                  "const body = pm.response.json();",
+                  "pm.test('error code is ALERT_ALREADY_ACKNOWLEDGED', () => pm.expect(body.code).to.eql('ALERT_ALREADY_ACKNOWLEDGED'));",
+                  "pm.test('error has requestId', () => pm.expect(body.requestId).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/doctor/alerts/{{alertId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctor",
+                "alerts",
+                "{{alertId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenDoctor}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACKNOWLEDGED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
