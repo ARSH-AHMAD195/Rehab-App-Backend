@@ -42,12 +42,18 @@ export class InvitationsService {
       return INVITATION_STATUS.FAILED;
     }
 
-    await this.audit.record({
-      actor,
-      action: AUDIT_ACTIONS.INVITATION_SENT,
-      patientId: user.role === ROLES.PATIENT ? user._id : null,
-      resourceId: String(user._id),
-    });
+    // The email is out, so a failed audit write must not turn this into an
+    // error: a retried registration would then hit EMAIL_ALREADY_EXISTS.
+    await this.audit
+      .record({
+        actor,
+        action: AUDIT_ACTIONS.INVITATION_SENT,
+        patientId: user.role === ROLES.PATIENT ? user._id : null,
+        resourceId: String(user._id),
+      })
+      .catch((error: Error) =>
+        this.logger.error(`Could not record the invitation to user ${String(user._id)}: ${error.message}`),
+      );
     return INVITATION_STATUS.SENT;
   }
 

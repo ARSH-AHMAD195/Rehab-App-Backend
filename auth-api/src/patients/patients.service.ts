@@ -145,10 +145,12 @@ export class PatientsService {
       .find({ _id: { $in: objectIds }, role: ROLES.DOCTOR }, { active: 1 })
       .lean();
     const byId = new Map(found.map((d) => [String(d._id), d.active]));
+    // Map keys are canonical lower-case hex; @IsMongoId also accepts upper case.
+    const canonical = objectIds.map(String);
 
-    if (ids.some((id) => !byId.has(id))) throw new NotFoundException('Doctor not found');
+    if (canonical.some((id) => !byId.has(id))) throw new NotFoundException('Doctor not found');
 
-    const inactive = ids.filter((id) => byId.get(id) === false);
+    const inactive = canonical.filter((id) => byId.get(id) === false);
     if (inactive.length) {
       throw new ValidationFailedException(
         inactive.map((id) => ({

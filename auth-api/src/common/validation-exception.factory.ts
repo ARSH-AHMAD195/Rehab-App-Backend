@@ -16,8 +16,13 @@ function flatten(errors: ValidationError[], prefix = ''): ErrorDetail[] {
   for (const error of errors) {
     const field = prefix ? `${prefix}.${error.property}` : error.property;
 
-    for (const [constraint, message] of Object.entries(error.constraints ?? {})) {
-      details.push({ field, code: codeFor(constraint), issue: stripField(message, error.property) });
+    if (error.constraints && error.value === undefined) {
+      // A missing field fails every rule on it (isString, maxLength, ...); one REQUIRED says it all.
+      details.push({ field, code: DETAIL_CODES.REQUIRED, issue: 'is required' });
+    } else {
+      for (const [constraint, message] of Object.entries(error.constraints ?? {})) {
+        details.push({ field, code: codeFor(constraint, error.value), issue: stripField(message, error.property) });
+      }
     }
     if (error.children?.length) details.push(...flatten(error.children, field));
   }
@@ -25,10 +30,11 @@ function flatten(errors: ValidationError[], prefix = ''): ErrorDetail[] {
   return details;
 }
 
-function codeFor(constraint: string): DetailCode {
+function codeFor(constraint: string, value: unknown): DetailCode {
   if (/^(isDefined|isNotEmpty|arrayNotEmpty)$/.test(constraint)) return DETAIL_CODES.REQUIRED;
-  if (/^maxLength$/.test(constraint)) return DETAIL_CODES.TOO_LONG;
-  if (/^(min|max|isPositive|isNegative)$/.test(constraint)) return DETAIL_CODES.OUT_OF_RANGE;
+  if (constraint === 'arrayMinSize' && Array.isArray(value) && value.length === 0) return DETAIL_CODES.REQUIRED;
+  if (/^(maxLength|arrayMaxSize)$/.test(constraint)) return DETAIL_CODES.TOO_LONG;
+  if (/^(min|max|isPositive|isNegative|minLength|arrayMinSize)$/.test(constraint)) return DETAIL_CODES.OUT_OF_RANGE;
   return DETAIL_CODES.WRONG_SHAPE;
 }
 

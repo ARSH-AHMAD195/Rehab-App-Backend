@@ -77,6 +77,17 @@ describe('Patient and doctor management', () => {
       await api().get('/api/v1/patients?limit=101').set('Authorization', t.auth(drMeera)).expect(400);
     });
 
+    it('400, not 500, for a well-formed cursor with a bad id', async () => {
+      const forged = Buffer.from(JSON.stringify({ k: 'x', id: 'not-an-id' })).toString('base64url');
+      const res = await api().get(`/api/v1/patients?cursor=${forged}`).set('Authorization', t.auth(drMeera)).expect(400);
+      expect(res.body.details).toEqual([{ field: 'cursor', code: 'WRONG_SHAPE', issue: expect.any(String) }]);
+    });
+
+    it('400 OUT_OF_RANGE for a one-letter search', async () => {
+      const res = await api().get('/api/v1/patients?q=a').set('Authorization', t.auth(admin)).expect(400);
+      expect(res.body.details).toEqual([{ field: 'q', code: 'OUT_OF_RANGE', issue: expect.any(String) }]);
+    });
+
     it('403 for a patient', async () => {
       await api().get('/api/v1/patients').set('Authorization', t.auth(rajesh)).expect(403);
     });
@@ -149,6 +160,15 @@ describe('Patient and doctor management', () => {
       await api().put(`/api/v1/patients/${rajesh.id}/doctors`).set('Authorization', t.auth(admin)).send({ doctorIds: [drMeera.id, drMeera.id] }).expect(400);
       await api().put(`/api/v1/patients/${rajesh.id}/doctors`).set('Authorization', t.auth(admin)).send({ doctorIds: [admin.id] }).expect(404);
       await api().put(`/api/v1/patients/${drMeera.id}/doctors`).set('Authorization', t.auth(admin)).send({ doctorIds: [drMeera.id] }).expect(404);
+    });
+
+    it('accepts doctor ids in upper case', async () => {
+      const res = await api()
+        .put(`/api/v1/patients/${rajesh.id}/doctors`)
+        .set('Authorization', t.auth(admin))
+        .send({ doctorIds: [drArjun.id.toUpperCase()] })
+        .expect(200);
+      expect(res.body.doctors).toEqual([{ id: drArjun.id, name: 'Dr Arjun Rao' }]);
     });
 
     it('403 for a doctor', async () => {

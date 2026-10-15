@@ -10,13 +10,14 @@ import {
   IsIn,
   IsInt,
   IsMongoId,
+  IsNotEmpty,
   IsOptional,
   IsString,
-  Length,
   Matches,
   Max,
   MaxLength,
   Min,
+  MinLength,
   ValidateIf,
 } from 'class-validator';
 import { DEFAULT_PAGE_LIMIT, MAX_DOCTORS_PER_PATIENT, MAX_PAGE_LIMIT, PHONE_PATTERN } from '../common/constants';
@@ -35,7 +36,8 @@ export class RegisterAdminDto {
   @ApiProperty({ example: 'Priya Menon' })
   @Transform(trim)
   @IsString()
-  @Length(1, 100)
+  @IsNotEmpty()
+  @MaxLength(100)
   name!: string;
 
   @ApiProperty({ example: 'priya@example.com', description: 'Stored in lower case. Must be unused.' })
@@ -85,7 +87,8 @@ export class UpdateMyProfileDto {
   @ifSent
   @Transform(trim)
   @IsString()
-  @Length(1, 100)
+  @IsNotEmpty()
+  @MaxLength(100)
   name?: string;
 
   @ApiPropertyOptional({ nullable: true })
@@ -111,7 +114,8 @@ export class UpdatePatientDto {
   @ifSent
   @Transform(trim)
   @IsString()
-  @Length(1, 100)
+  @IsNotEmpty()
+  @MaxLength(100)
   name?: string;
 
   @ApiPropertyOptional({ nullable: true })
@@ -135,7 +139,8 @@ export class UpdateDoctorDto {
   @ifSent
   @Transform(trim)
   @IsString()
-  @Length(1, 100)
+  @IsNotEmpty()
+  @MaxLength(100)
   name?: string;
 
   @ApiPropertyOptional({ nullable: true })
@@ -173,7 +178,8 @@ export class UserListQueryDto {
   @IsOptional()
   @Transform(trim)
   @IsString()
-  @Length(2, 100)
+  @MinLength(2)
+  @MaxLength(100)
   q?: string;
 
   @ApiPropertyOptional({ enum: ['true', 'false', 'all'], default: 'true' })

@@ -5,10 +5,10 @@ import {
   IsArray,
   IsIn,
   IsInt,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
-  Length,
   Matches,
   Max,
   MaxLength,
@@ -27,13 +27,15 @@ export class EmergencyContactDto {
   @ApiProperty({ example: 'Sunita Iyer' })
   @Transform(trim)
   @IsString()
-  @Length(1, 100)
+  @IsNotEmpty()
+  @MaxLength(100)
   name!: string;
 
   @ApiProperty({ example: 'Wife' })
   @Transform(trim)
   @IsString()
-  @Length(1, 50)
+  @IsNotEmpty()
+  @MaxLength(50)
   relation!: string;
 
   @ApiProperty({ example: '+919812345678' })

@@ -1,4 +1,6 @@
 import request from 'supertest';
+import { Types } from 'mongoose';
+import { AuditService } from '../src/audit/audit.service';
 import { createTestApp, TestContext, TestUser } from './helpers/test-app';
 
 describe('Registration and invitations', () => {
@@ -91,6 +93,38 @@ describe('Registration and invitations', () => {
       expect(again.body).toEqual({ invitation: 'SENT' });
     });
 
+    it('an audit failure after the email went out does not fail a finished registration', async () => {
+      const audit = t.app.get(AuditService);
+      const record = audit.record.bind(audit);
+      const spy = jest.spyOn(audit, 'record').mockImplementation(async (entry, session) => {
+        if (entry.action === 'INVITATION_SENT') throw new Error('mongo blip');
+        return record(entry, session);
+      });
+      try {
+        const res = await api()
+          .post('/api/v1/doctors')
+          .set('Authorization', t.auth(admin))
+          .send({ name: 'Dr X', email: 'x@test.example' })
+          .expect(201);
+        expect(res.body.invitation).toBe('SENT');
+        expect(t.identity.sentEmails).toEqual(['x@test.example']);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('400 details carry the documented codes', async () => {
+      const cases: [object, string, string][] = [
+        [{ email: 'x@test.example' }, 'name', 'REQUIRED'],
+        [{ name: '   ', email: 'x@test.example' }, 'name', 'REQUIRED'],
+        [{ name: 'x'.repeat(101), email: 'x@test.example' }, 'name', 'TOO_LONG'],
+      ];
+      for (const [body, field, code] of cases) {
+        const res = await api().post('/api/v1/doctors').set('Authorization', t.auth(admin)).send(body).expect(400);
+        expect(res.body.details).toEqual([{ field, code, issue: expect.any(String) }]);
+      }
+    });
+
     it('removes the Firebase account again when the profile cannot be saved', async () => {
       // The fake's next uid is fb-1; occupy it so the profile insert clashes.
       await t.connection.collection('users').insertOne({ firebaseUid: 'fb-1', role: 'ADMIN', name: 'clash', active: true });
@@ -137,6 +171,27 @@ describe('Registration and invitations', () => {
         .send({ name: 'R', email: 'r@test.example', doctorIds: [doctor.id], timeZone: 'Europe/London' })
         .expect(201);
       expect(res.body).toMatchObject({ timeZone: 'Europe/London', doctors: [{ id: doctor.id }] });
+    });
+
+    it('accepts a doctor id in upper case', async () => {
+      const res = await api()
+        .post('/api/v1/patients')
+        .set('Authorization', t.auth(admin))
+        .send({ name: 'R', email: 'r@test.example', doctorIds: [doctor.id.toUpperCase()] })
+        .expect(201);
+      expect(res.body.doctors).toEqual([{ id: doctor.id, name: 'Dr Meera Nair' }]);
+    });
+
+    it('400 REQUIRED for an empty doctor list, TOO_LONG for more than 10', async () => {
+      const tooMany = Array.from({ length: 11 }, () => new Types.ObjectId().toString());
+      for (const [doctorIds, code] of [[[], 'REQUIRED'], [tooMany, 'TOO_LONG']] as const) {
+        const res = await api()
+          .post('/api/v1/patients')
+          .set('Authorization', t.auth(admin))
+          .send({ name: 'R', email: 'r@test.example', doctorIds })
+          .expect(400);
+        expect(res.body.details).toEqual([{ field: 'doctorIds', code, issue: expect.any(String) }]);
+      }
     });
 
     it('404 for an unknown doctor, 400 for a deactivated one', async () => {

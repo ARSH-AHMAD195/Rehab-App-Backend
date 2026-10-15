@@ -15,6 +15,9 @@ export interface CursorPayload {
   id: string;
 }
 
+/** Callers turn `id` into an ObjectId, which throws (a 500) on anything else. */
+const OBJECT_ID = /^[0-9a-f]{24}$/i;
+
 export function encodeCursor(payload: CursorPayload): string {
   return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
 }
@@ -22,7 +25,7 @@ export function encodeCursor(payload: CursorPayload): string {
 export function decodeCursor(cursor: string, field = 'cursor'): CursorPayload {
   try {
     const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
-    if (typeof parsed?.k !== 'string' || typeof parsed?.id !== 'string') throw new Error('shape');
+    if (typeof parsed?.k !== 'string' || !OBJECT_ID.test(parsed?.id)) throw new Error('shape');
     return parsed;
   } catch {
     throw new ValidationFailedException([
