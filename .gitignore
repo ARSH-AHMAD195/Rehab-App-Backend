@@ -1,0 +1,16 @@
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+
+# Secrets - never commit
+.env
+.env.*
+!.env.example
+firebase-service-account*.json
+
+# OS and tool leftovers
+*.log
+*.stackdump
+.DS_Store
+Thumbs.db
