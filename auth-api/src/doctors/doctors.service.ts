@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Types } from 'mongoose';
+import { ClientSession, Types } from 'mongoose';
 import { ROLES, Role } from '../common/constants';
 import { DoctorHasPatientsException } from '../common/api.exception';
 import { RegistrationService } from '../registration/registration.service';
@@ -39,10 +39,18 @@ export class DoctorsService {
 
   async update(actor: Actor, doctorId: string, dto: UpdateDoctorDto): Promise<DoctorResponse> {
     const doctor = await this.users.getByRole(doctorId, ROLES.DOCTOR, 'Doctor not found');
-    if (dto.active === false && doctor.active) await this.assertNotSoleDoctor(doctor._id);
+    const deactivating = dto.active === false && doctor.active;
+    // Checked up front too, so a refusal never briefly locks the doctor out of Firebase.
+    if (deactivating) await this.assertNotSoleDoctor(doctor._id);
 
     const { active, ...changes } = dto;
-    const updated = await this.accounts.update(actor, doctor, changes, active);
+    const updated = await this.accounts.update(
+      actor,
+      doctor,
+      changes,
+      active,
+      deactivating ? (session) => this.assertNotSoleDoctor(doctor._id, session) : undefined,
+    );
     const [response] = await this.responses.doctors([updated]);
     return response;
   }
@@ -50,10 +58,14 @@ export class DoctorsService {
   /**
    * v1.0: a doctor who is the only active doctor of any active patient can't
    * be deactivated - that patient would be left with nobody to review them.
+   *
+   * With a session it also writes to those patients, so two doctors of one
+   * patient deactivated at once conflict instead of both passing the check.
    */
-  private async assertNotSoleDoctor(doctorId: Types.ObjectId): Promise<void> {
+  private async assertNotSoleDoctor(doctorId: Types.ObjectId, session?: ClientSession): Promise<void> {
     const patients = await this.users.model
       .find({ role: ROLES.PATIENT, active: true, doctorIds: doctorId }, { doctorIds: 1 })
+      .session(session ?? null)
       .lean();
     if (!patients.length) return;
 
@@ -64,11 +76,13 @@ export class DoctorsService {
       (
         await this.users.model
           .find({ _id: { $in: otherIds.map((id) => new Types.ObjectId(id)) }, role: ROLES.DOCTOR, active: true }, { _id: 1 })
+          .session(session ?? null)
           .lean()
       ).map((d) => String(d._id)),
     );
 
     const stranded = patients.filter((p) => !p.doctorIds.some((id) => activeOthers.has(String(id))));
     if (stranded.length) throw new DoctorHasPatientsException(stranded.length);
+    if (session) await this.users.lock(patients.map((p) => p._id), session);
   }
 }

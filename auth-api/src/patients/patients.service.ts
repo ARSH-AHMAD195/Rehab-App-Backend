@@ -119,6 +119,7 @@ export class PatientsService {
 
     if (!unchanged) {
       await this.tx.run(async (session) => {
+        await this.users.lockActiveDoctors(doctorIds, session);
         await this.users.model.updateOne({ _id: patient._id }, { $set: { doctorIds } }, { session }).exec();
         await this.audit.record(
           {

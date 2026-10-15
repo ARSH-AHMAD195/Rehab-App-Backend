@@ -57,6 +57,17 @@ export class User {
   @Prop({ type: Types.ObjectId, default: null })
   createdBy!: Types.ObjectId | null;
 
+  /**
+   * Bumped inside a transaction only to make it conflict with another one
+   * touching the same user - see UsersService.lockActiveDoctors. Means nothing.
+   */
+  @Prop({ default: 0 })
+  lockVersion!: number;
+
+  /** Set while a set-password email to this user is being resent; see InvitationsService.resend. */
+  @Prop({ type: Date, default: null })
+  invitationLockedUntil!: Date | null;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

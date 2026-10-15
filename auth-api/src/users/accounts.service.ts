@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ClientSession } from 'mongoose';
 import { AUDIT_ACTIONS, DETAIL_CODES, ROLES, Role } from '../common/constants';
 import { ValidationFailedException } from '../common/api.exception';
 import { TransactionRunner } from '../common/mongo/transaction.runner';
@@ -40,6 +41,8 @@ export class AccountsService {
     user: UserDocument,
     changes: ProfileChanges,
     active?: boolean,
+    /** Runs first inside the write transaction; throw to abort it. */
+    guard?: (session: ClientSession) => Promise<void>,
   ): Promise<UserDocument> {
     if (changes.timeZone !== undefined && !isValidTimeZone(changes.timeZone)) {
       throw new ValidationFailedException([
@@ -67,6 +70,7 @@ export class AccountsService {
     const patientId = user.role === ROLES.PATIENT ? user._id : null;
     try {
       await this.tx.run(async (session) => {
+        await guard?.(session);
         await this.users.model
           .updateOne({ _id: user._id }, { $set: { ...after, ...(activeChanged ? { active } : {}) } }, { session })
           .exec();

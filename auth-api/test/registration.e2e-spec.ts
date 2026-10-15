@@ -289,6 +289,28 @@ describe('Registration and invitations', () => {
       expect(res.headers['retry-after']).toBe('3600');
     });
 
+    it('parallel resends cannot get past the limit', async () => {
+      // A slow mailer keeps every request in flight at once.
+      const send = t.identity.sendSetPasswordEmail.bind(t.identity);
+      const spy = jest.spyOn(t.identity, 'sendSetPasswordEmail').mockImplementation(async (email) => {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return send(email);
+      });
+      try {
+        const results = await Promise.all(
+          Array.from({ length: 8 }, () =>
+            api().post(`/api/v1/users/${doctor.id}/invitations`).set('Authorization', t.auth(admin)),
+          ),
+        );
+        expect(results.every((r) => r.status === 202 || r.status === 429)).toBe(true);
+        expect(t.identity.sentEmails.length).toBeLessThanOrEqual(5);
+      } finally {
+        spy.mockRestore();
+      }
+      // The lock is released: the next resend goes through.
+      await api().post(`/api/v1/users/${doctor.id}/invitations`).set('Authorization', t.auth(admin)).expect(202);
+    });
+
     it('403 for a patient', async () => {
       const patient = await t.seed({ role: 'PATIENT', name: 'P', doctorIds: [doctor.id] });
       await api().post(`/api/v1/users/${patient.id}/invitations`).set('Authorization', t.auth(patient)).expect(403);

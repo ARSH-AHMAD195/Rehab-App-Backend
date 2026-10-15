@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { Types } from 'mongoose';
+import { AuditService } from '../src/audit/audit.service';
 import { createTestApp, TestContext, TestUser } from './helpers/test-app';
 
 describe('Patient and doctor management', () => {
@@ -10,6 +11,11 @@ describe('Patient and doctor management', () => {
   let rajesh: TestUser;
   let anita: TestUser;
   const api = () => request(t.app.getHttpServer());
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const activeDoctorsOf = async (patientId: string) => {
+    const patient = await t.connection.collection('users').findOne({ _id: new Types.ObjectId(patientId) });
+    return t.connection.collection('users').find({ _id: { $in: patient!.doctorIds }, active: true }).toArray();
+  };
 
   beforeAll(async () => {
     t = await createTestApp();
@@ -210,6 +216,70 @@ describe('Patient and doctor management', () => {
       await api().put(`/api/v1/patients/${rajesh.id}/doctors`).set('Authorization', t.auth(admin)).send({ doctorIds: [drMeera.id, drArjun.id] }).expect(200);
       await api().patch(`/api/v1/doctors/${drMeera.id}`).set('Authorization', t.auth(admin)).send({ active: false }).expect(200);
       expect(t.identity.accounts.get(drMeera.uid)!.disabled).toBe(true);
+    });
+
+    it('two doctors of one patient deactivated at once: one is refused, the patient keeps a doctor', async () => {
+      const drA = await t.seed({ role: 'DOCTOR', name: 'Dr A' });
+      const drB = await t.seed({ role: 'DOCTOR', name: 'Dr B' });
+      const shared = await t.seed({ role: 'PATIENT', name: 'Shared', doctorIds: [drA.id, drB.id] });
+
+      // Hold both requests after their up-front check, so both have seen the other doctor as active.
+      let arrived = 0;
+      let release!: () => void;
+      const bothChecked = new Promise<void>((resolve) => (release = resolve));
+      const setDisabled = t.identity.setDisabled.bind(t.identity);
+      const spy = jest.spyOn(t.identity, 'setDisabled').mockImplementation(async (uid, disabled) => {
+        if (disabled) {
+          if (++arrived === 2) release();
+          await Promise.race([bothChecked, sleep(2000)]);
+        }
+        return setDisabled(uid, disabled);
+      });
+
+      try {
+        const results = await Promise.all(
+          [drA, drB].map((d) =>
+            api().patch(`/api/v1/doctors/${d.id}`).set('Authorization', t.auth(admin)).send({ active: false }),
+          ),
+        );
+        expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+      } finally {
+        spy.mockRestore();
+      }
+
+      expect(await activeDoctorsOf(shared.id)).toHaveLength(1);
+      // The refused doctor's Firebase account is put back.
+      expect([drA, drB].filter((d) => t.identity.accounts.get(d.uid)!.disabled)).toHaveLength(1);
+    });
+
+    it('linking a doctor while they are deactivated: the patient never ends up with an inactive doctor', async () => {
+      const drNew = await t.seed({ role: 'DOCTOR', name: 'Dr New' });
+
+      // Hold the link change inside its transaction until the deactivation has run.
+      let deactivated!: Promise<unknown>;
+      const audit = t.app.get(AuditService);
+      const record = audit.record.bind(audit);
+      const spy = jest.spyOn(audit, 'record').mockImplementation(async (entry, session) => {
+        if (entry.action === 'DOCTOR_LINKS_CHANGED') {
+          deactivated = api().patch(`/api/v1/doctors/${drNew.id}`).set('Authorization', t.auth(admin)).send({ active: false }).then((r) => r);
+          await Promise.race([deactivated, sleep(1000)]);
+        }
+        return record(entry, session);
+      });
+
+      try {
+        const linked = await api()
+          .put(`/api/v1/patients/${rajesh.id}/doctors`)
+          .set('Authorization', t.auth(admin))
+          .send({ doctorIds: [drNew.id] });
+        const deactivation = (await deactivated) as { status: number };
+        expect([linked.status, deactivation.status].sort()).not.toEqual([200, 200]);
+      } finally {
+        spy.mockRestore();
+      }
+
+      const patient = await t.connection.collection('users').findOne({ _id: new Types.ObjectId(rajesh.id) });
+      expect(await activeDoctorsOf(rajesh.id)).toHaveLength(patient!.doctorIds.length);
     });
 
     it('an inactive co-doctor does not count as cover', async () => {

@@ -50,6 +50,7 @@ export class RegistrationService {
     let user: UserDocument;
     try {
       user = await this.tx.run(async (session) => {
+        if (input.doctorIds?.length) await this.users.lockActiveDoctors(input.doctorIds, session);
         const [created] = await this.users.model.create(
           [
             {
