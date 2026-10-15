@@ -33,6 +33,7 @@ export class MedicalProfile {
   @Prop({ type: String, default: null }) smokingStatus!: string | null;
   @Prop({ type: Object, default: null }) emergencyContact!: EmergencyContact | null;
 
+
   /** Optimistic concurrency: PATCH sends the version it read. */
   @Prop({ required: true, default: 1 })
   version!: number;
@@ -47,18 +48,28 @@ export class MedicalProfile {
 export type MedicalProfileDocument = HydratedDocument<MedicalProfile>;
 export const MedicalProfileSchema = SchemaFactory.createForClass(MedicalProfile);
 
-export const MEDICAL_FIELDS = [
-  'dateOfBirth',
-  'sex',
-  'heightCm',
-  'bloodGroup',
-  'diagnosis',
-  'plannedSurgery',
-  'plannedSurgeryDate',
-  'comorbidities',
-  'allergies',
-  'medications',
-  'smokingStatus',
-  'emergencyContact',
-] as const;
-export type MedicalField = (typeof MEDICAL_FIELDS)[number];
+/**
+ * The clinical fields, which the service reads, diffs and returns - a field
+ * missing here is silently dropped. Typed against the class above, so a new
+ * @Prop that isn't added here fails to compile; UpdateMedicalProfileDto checks
+ * itself against MedicalField the same way.
+ */
+const FIELD_SET: Record<
+  Exclude<keyof MedicalProfile, 'patientId' | 'version' | 'updatedBy' | 'createdAt' | 'updatedAt'>,
+  true
+> = {
+  dateOfBirth: true,
+  sex: true,
+  heightCm: true,
+  bloodGroup: true,
+  diagnosis: true,
+  plannedSurgery: true,
+  plannedSurgeryDate: true,
+  comorbidities: true,
+  allergies: true,
+  medications: true,
+  smokingStatus: true,
+  emergencyContact: true,
+};
+export type MedicalField = keyof typeof FIELD_SET;
+export const MEDICAL_FIELDS = Object.keys(FIELD_SET) as MedicalField[];

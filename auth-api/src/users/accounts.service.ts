@@ -69,10 +69,14 @@ export class AccountsService {
 
     const patientId = user.role === ROLES.PATIENT ? user._id : null;
     try {
-      await this.tx.run(async (session) => {
+      return await this.tx.run(async (session) => {
         await guard?.(session);
-        await this.users.model
-          .updateOne({ _id: user._id }, { $set: { ...after, ...(activeChanged ? { active } : {}) } }, { session })
+        const updated = await this.users.model
+          .findOneAndUpdate(
+            { _id: user._id },
+            { $set: { ...after, ...(activeChanged ? { active } : {}) } },
+            { new: true, session },
+          )
           .exec();
 
         if (Object.keys(after).length) {
@@ -94,6 +98,7 @@ export class AccountsService {
             session,
           );
         }
+        return updated!;
       });
     } catch (error) {
       if (activeChanged) {
@@ -103,7 +108,5 @@ export class AccountsService {
       }
       throw error;
     }
-
-    return (await this.users.model.findById(user._id).exec())!;
   }
 }

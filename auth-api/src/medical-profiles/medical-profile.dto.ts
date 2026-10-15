@@ -16,6 +16,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { BLOOD_GROUPS, PHONE_PATTERN, SEXES, SMOKING_STATUSES } from '../common/constants';
+import { MedicalField } from './medical-profile.schema';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DATE_ISSUE = 'must be a date as YYYY-MM-DD';
@@ -132,3 +133,8 @@ export class UpdateMedicalProfileDto {
   @Type(() => EmergencyContactDto)
   emergencyContact?: EmergencyContactDto | null;
 }
+
+// Compile-time only: the DTO's fields (besides version) are exactly the schema's MEDICAL_FIELDS.
+type SameKeys<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+const dtoMatchesSchema: SameKeys<Exclude<keyof UpdateMedicalProfileDto, 'version'>, MedicalField> = true;
+void dtoMatchesSchema;

@@ -117,10 +117,13 @@ export class PatientsService {
     const after = doctorIds.map(String);
     const unchanged = before.length === after.length && before.every((id) => after.includes(id));
 
+    let saved = patient;
     if (!unchanged) {
-      await this.tx.run(async (session) => {
+      saved = await this.tx.run(async (session) => {
         await this.users.lockActiveDoctors(doctorIds, session);
-        await this.users.model.updateOne({ _id: patient._id }, { $set: { doctorIds } }, { session }).exec();
+        const updated = await this.users.model
+          .findOneAndUpdate({ _id: patient._id }, { $set: { doctorIds } }, { new: true, session })
+          .exec();
         await this.audit.record(
           {
             actor,
@@ -132,10 +135,11 @@ export class PatientsService {
           },
           session,
         );
+        return updated!;
       });
     }
 
-    const [response] = await this.responses.patients([(await this.users.model.findById(patient._id).exec())!]);
+    const [response] = await this.responses.patients([saved]);
     return response;
   }
 
