@@ -177,6 +177,15 @@ describe('Patient and doctor management', () => {
       expect(res.body.doctors).toEqual([{ id: drArjun.id, name: 'Dr Arjun Rao' }]);
     });
 
+    it('the same doctor in two different letter cases is one doctor, not a conflict', async () => {
+      const res = await api()
+        .put(`/api/v1/patients/${rajesh.id}/doctors`)
+        .set('Authorization', t.auth(admin))
+        .send({ doctorIds: [drArjun.id, drArjun.id.toUpperCase()] })
+        .expect(200);
+      expect(res.body.doctors).toEqual([{ id: drArjun.id, name: 'Dr Arjun Rao' }]);
+    });
+
     it('403 for a doctor', async () => {
       await api().put(`/api/v1/patients/${rajesh.id}/doctors`).set('Authorization', t.auth(drMeera)).send({ doctorIds: [drMeera.id] }).expect(403);
     });

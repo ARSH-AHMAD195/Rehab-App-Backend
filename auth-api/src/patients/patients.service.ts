@@ -165,6 +165,10 @@ export class PatientsService {
         })),
       );
     }
-    return objectIds;
+    // The same doctor sent twice in different letter case is still one doctor:
+    // dedupe by canonical id, or lockActiveDoctors's modifiedCount check (one
+    // document written) would not match ids.length (two entries) and wrongly
+    // report a concurrent deactivation.
+    return [...new Map(objectIds.map((id) => [String(id), id])).values()];
   }
 }
