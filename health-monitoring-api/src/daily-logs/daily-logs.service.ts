@@ -200,7 +200,7 @@ export class DailyLogsService {
       date: { $gte: from, $lte: to },
     };
     if (query.cursor) {
-      const { k, id } = decodeCursor(query.cursor);
+      const { k, id } = decodeCursor(query.cursor, 'date');
       filter.$or = [{ date: { $lt: k } }, { date: k, _id: { $lt: new Types.ObjectId(id) } }];
     }
 

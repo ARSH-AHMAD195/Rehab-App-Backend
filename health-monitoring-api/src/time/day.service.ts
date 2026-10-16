@@ -1,9 +1,22 @@
 import { Injectable } from '@nestjs/common';
+import { ValidateBy } from 'class-validator';
 import { DateTime } from 'luxon';
 import { DETAIL_CODES, TREND_PERIODS, TrendPeriod } from '../common/constants';
 import { ValidationFailedException } from '../common/api.exception';
 
 export const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** YYYY-MM-DD and a real calendar day: 2026-02-30 matches the pattern but is not one. */
+export function isCalendarDate(value: unknown): value is string {
+  return typeof value === 'string' && DATE_PATTERN.test(value) && DateTime.fromISO(value).isValid;
+}
+
+/** DTO rule for a YYYY-MM-DD date that must exist on the calendar. */
+export const IsCalendarDate = () =>
+  ValidateBy({
+    name: 'isCalendarDate',
+    validator: { validate: isCalendarDate, defaultMessage: () => 'must be a date as YYYY-MM-DD' },
+  });
 
 /**
  * Day and time zone, v1.1:
@@ -37,7 +50,7 @@ export class DayService {
   }
 
   isValidDate(value: string): boolean {
-    return DATE_PATTERN.test(value) && DateTime.fromISO(value).isValid;
+    return isCalendarDate(value);
   }
 
   /** `date` shifted by whole local days. */

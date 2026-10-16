@@ -92,7 +92,7 @@ export class ThresholdsService {
       filter.patientId = new Types.ObjectId(params.patientId);
     }
     if (params.cursor) {
-      const { k, id } = decodeCursor(params.cursor);
+      const { k, id } = decodeCursor(params.cursor, 'timestamp');
       filter.$or = [
         { effectiveFrom: { $lt: new Date(k) } },
         { effectiveFrom: new Date(k), _id: { $lt: new Types.ObjectId(id) } },

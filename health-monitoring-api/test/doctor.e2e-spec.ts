@@ -225,6 +225,31 @@ describe('Doctor endpoints and the alert lifecycle (v1.1 /doctor)', () => {
       ).resolves.toBe(2);
     });
 
+    it('re-points the de-duplicated alert at the breach the latest value made', async () => {
+      await setLimit({ field: null, low: 50, high: 110, severity: 'MEDIUM' }, 'PULSE');
+      await save({ PULSE: { num: 40 } });
+      // The patient corrects a typo to a value that crosses the other limit.
+      await setLimit({ field: null, low: 50, high: 120, severity: 'MEDIUM' }, 'PULSE');
+      const saved = await save({ PULSE: { num: 180 } });
+
+      expect(saved.body.alerts[0]).toMatchObject({ rule: 'ABOVE_HIGH', threshold: 120 });
+      const current = await ctx.connection.collection('alertThresholds').findOne({}, { sort: { version: -1 } });
+      const alert = await ctx.connection.collection('vitalAlerts').findOne({});
+      expect(alert).toMatchObject({
+        value: { num: 180 },
+        rule: 'ABOVE_HIGH',
+        threshold: 120,
+        thresholdId: current!._id,
+        thresholdVersion: current!.version,
+      });
+    });
+
+    it('400, not 500, for a cursor whose timestamp is not a date', async () => {
+      const forged = Buffer.from(JSON.stringify({ k: 'garbage', id: '6700aa01e4b0f1a2b3c4d5e6' })).toString('base64url');
+      const res = await as(doctor, 'get', `/api/v1/doctor/alerts?cursor=${forged}`).expect(400);
+      expect(res.body.code).toBe(ERROR_CODES.VALIDATION_FAILED);
+    });
+
     it('keeps the alert open when the value is edited back into range', async () => {
       await setLimit({ field: null, low: null, high: 6, severity: 'MEDIUM' });
       await save({ PAIN: { num: 7 } });

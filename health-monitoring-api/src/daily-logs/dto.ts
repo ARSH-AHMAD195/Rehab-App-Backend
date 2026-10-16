@@ -7,7 +7,6 @@ import {
   IsObject,
   IsOptional,
   IsString,
-  Matches,
   Max,
   Min,
 } from 'class-validator';
@@ -19,9 +18,7 @@ import {
   TrendPeriod,
   VITAL_TYPES,
 } from '../common/constants';
-import { DATE_PATTERN } from '../time/day.service';
-
-const DATE_ISSUE = 'must be a date as YYYY-MM-DD';
+import { IsCalendarDate } from '../time/day.service';
 
 /** PUT /me/vitals/today body (v1.1). */
 export class SaveTodayDto {
@@ -33,7 +30,7 @@ export class SaveTodayDto {
   })
   @IsString()
   @IsNotEmpty()
-  @Matches(DATE_PATTERN, { message: DATE_ISSUE })
+  @IsCalendarDate()
   date!: string;
 
   @ApiProperty({
@@ -65,12 +62,12 @@ export class PaginationQueryDto {
 export class LogsQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ example: '2026-09-10', description: 'Defaults to 30 days ago.' })
   @IsOptional()
-  @Matches(DATE_PATTERN, { message: DATE_ISSUE })
+  @IsCalendarDate()
   from?: string;
 
   @ApiPropertyOptional({ example: '2026-10-09', description: 'Defaults to today.' })
   @IsOptional()
-  @Matches(DATE_PATTERN, { message: DATE_ISSUE })
+  @IsCalendarDate()
   to?: string;
 }
 

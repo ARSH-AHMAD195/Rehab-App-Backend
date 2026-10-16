@@ -105,7 +105,13 @@ export class AlertsService {
           const escalated =
             SEVERITY_RANK[threshold.severity] > SEVERITY_RANK[existing.severity];
 
+          // Rule, limit and threshold version describe this breach, not the
+          // first one: a corrected 40 -> 180 pulse is ABOVE_HIGH, not BELOW_LOW.
           existing.value = value as Record<string, unknown>;
+          existing.rule = breach.rule;
+          existing.threshold = breach.limit;
+          existing.thresholdId = threshold._id;
+          existing.thresholdVersion = threshold.version;
           if (escalated) existing.severity = threshold.severity;
           existing.markModified('value');
           await existing.save({ session });
@@ -182,7 +188,7 @@ export class AlertsService {
       status: params.status ?? ALERT_STATUS.OPEN,
     };
     if (params.cursor) {
-      const { k, id } = decodeCursor(params.cursor);
+      const { k, id } = decodeCursor(params.cursor, 'timestamp');
       filter.$or = [
         { createdAt: { $lt: new Date(k) } },
         { createdAt: new Date(k), _id: { $lt: new Types.ObjectId(id) } },

@@ -194,11 +194,12 @@ export class ReadingsValidatorService {
       details.push({ field: path, code: DETAIL_CODES.WRONG_SHAPE, issue: this.shapeHint(def) });
       return null;
     }
-    const text = raw.text;
-    if (typeof text !== 'string') {
+    if (typeof raw.text !== 'string') {
       details.push({ field: `${path}.text`, code: DETAIL_CODES.WRONG_SHAPE, issue: 'must be text' });
       return null;
     }
+    // Trimmed once, and stored trimmed: padding alone must not count as a change.
+    const text = raw.text.trim();
     // For text, minValid and maxValid are character counts (v1.1).
     if (def.maxValid !== null && text.length > def.maxValid) {
       details.push({
@@ -208,7 +209,7 @@ export class ReadingsValidatorService {
       });
       return null;
     }
-    if (def.minValid !== null && text.trim().length < def.minValid) {
+    if (def.minValid !== null && text.length < def.minValid) {
       details.push({
         field: `${path}.text`,
         code: DETAIL_CODES.REQUIRED,

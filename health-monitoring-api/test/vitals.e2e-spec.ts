@@ -212,6 +212,15 @@ describe('Patient vitals (v1.1 /me/vitals)', () => {
       await expect(ctx.connection.collection('dailyLogs').countDocuments()).resolves.toBe(0);
     });
 
+    it('rejects a date that is not on the calendar with 400, not DAY_CHANGED', async () => {
+      const res = await asPatient('put', '/api/v1/me/vitals/today')
+        .send({ date: '2026-02-30', readings: { PULSE: { num: 76 } } })
+        .expect(400);
+      expect(res.body.details).toEqual([
+        { field: 'date', code: DETAIL_CODES.WRONG_SHAPE, issue: expect.any(String) },
+      ]);
+    });
+
     it('requires the date', async () => {
       const res = await asPatient('put', '/api/v1/me/vitals/today')
         .send({ readings: { PULSE: { num: 76 } } })
@@ -339,6 +348,17 @@ describe('Patient vitals (v1.1 /me/vitals)', () => {
       ).expect(200);
       expect(second.body.data).toHaveLength(1);
       expect(second.body.nextCursor).toBeNull();
+    });
+
+    it('rejects from/to that are not on the calendar', async () => {
+      const res = await asPatient('get', '/api/v1/me/vitals/logs?from=2026-99-01&to=2026-99-30').expect(400);
+      expect(res.body.details.map((d: { field: string }) => d.field).sort()).toEqual(['from', 'to']);
+    });
+
+    it('400, not 500, for a well-formed cursor with a bad id', async () => {
+      const forged = Buffer.from(JSON.stringify({ k: today(), id: 'zzz' })).toString('base64url');
+      const res = await asPatient('get', `/api/v1/me/vitals/logs?cursor=${forged}`).expect(400);
+      expect(res.body.details[0]).toMatchObject({ field: 'cursor', code: DETAIL_CODES.WRONG_SHAPE });
     });
 
     it('rejects from after to, and a limit above 100', async () => {

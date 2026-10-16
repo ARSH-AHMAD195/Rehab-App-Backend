@@ -129,6 +129,11 @@ describe('ReadingsValidatorService', () => {
     ]);
   });
 
+  it('stores nutrition text trimmed, so padding alone is not a change', async () => {
+    const [reading] = await validator.validate({ NUTRITION: { text: '  rice and dal  ' } });
+    expect(reading.value).toEqual({ text: 'rice and dal' });
+  });
+
   it('treats null as clearing a value', async () => {
     const [reading] = await validator.validate({ PAIN: null });
     expect(reading.value).toBeNull();
