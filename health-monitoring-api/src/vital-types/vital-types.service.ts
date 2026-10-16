@@ -104,7 +104,11 @@ export class VitalTypesService implements OnModuleInit {
     dto: UpdateVitalTypeDto,
     actor: AuthUser,
   ): Promise<VitalTypeResponse> {
-    const current = await this.get(type);
+    // From the database, not the cache: the cache on this instance may predate
+    // a save made through another one, and the version guard below would then
+    // report that as someone else's edit.
+    const current = await this.model.findOne({ type }).exec();
+    if (!current) throw new NotFoundException(`Unknown parameter "${type}"`);
     this.assertValid(current, dto);
 
     const updated = await this.tx.run(async (session) => {

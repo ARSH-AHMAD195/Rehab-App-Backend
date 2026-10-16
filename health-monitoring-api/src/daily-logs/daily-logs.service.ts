@@ -95,19 +95,27 @@ export class DailyLogsService {
 
     // Step 5: drop fields whose value is unchanged. An identical re-send is
     // therefore a no-op: same loggedAt, no audit entry, alert or event.
-    const changed = validated.filter(
-      ({ def, value }) => !sameValue(this.storedValue(existing, def.type), value),
-    );
+    const changedIn = (log: DailyLogDocument | null) =>
+      validated.filter(({ def, value }) => !sameValue(this.storedValue(log, def.type), value));
+    const noChange = (log: DailyLogDocument | null) => ({
+      ...toLogResponse(log ?? this.emptyLog({ id: patient.id, timeZone: patient.timeZone }, today, defs), defs, this.day),
+      alerts: [],
+    });
 
-    if (!changed.length) {
-      const log = existing ?? this.emptyLog({ id: patient.id, timeZone: patient.timeZone }, today, defs);
-      return { ...toLogResponse(log, defs, this.day), alerts: [] };
-    }
+    // Fast path, outside the transaction, for the common plain re-send.
+    if (!changedIn(existing).length) return noChange(existing);
 
     const doctorIds = await this.users.doctorIdsForPatient(patient.id);
     const now = this.day.now();
 
-    const { log, alerts } = await this.tx.run(async (session) => {
+    const result = await this.tx.run(async (session) => {
+      // Decided again inside the transaction: a retry of this same request may
+      // have committed since the read above. Two saves racing both write this
+      // log, so one is retried and, re-reading here, finds nothing changed.
+      const existing = await this.model.findOne({ patientId, date: today }).session(session).exec();
+      const changed = changedIn(existing);
+      if (!changed.length) return { unchanged: true as const, log: existing };
+
       const updated = await this.model
         .findOneAndUpdate(
           { patientId, date: today },
@@ -178,10 +186,11 @@ export class DailyLogsService {
       ];
       await this.outbox.enqueue(events, session);
 
-      return { log: updated, alerts: this.alerts.toSaveResponse(evaluated) };
+      return { unchanged: false as const, log: updated, alerts: this.alerts.toSaveResponse(evaluated) };
     });
 
-    return { ...toLogResponse(log, defs, this.day), alerts };
+    if (result.unchanged) return noChange(result.log);
+    return { ...toLogResponse(result.log, defs, this.day), alerts: result.alerts };
   }
 
   /**

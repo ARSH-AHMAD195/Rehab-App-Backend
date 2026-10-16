@@ -230,6 +230,17 @@ describe('Admin endpoints (v1.1 /admin)', () => {
   });
 
   describe('PUT /admin/vital-types/:type', () => {
+    it('is not refused as a conflict because this instance cached an older version', async () => {
+      // This instance caches version 1; another instance then saves version 2.
+      await ctx.app.get((await import('../src/vital-types/vital-types.service')).VitalTypesService).list();
+      await ctx.connection.collection('vitalTypes').updateOne({ type: 'PULSE' }, { $inc: { version: 1 } });
+
+      const res = await as(admin, 'put', '/api/v1/admin/vital-types/PULSE')
+        .send({ minValid: 40, maxValid: 180 })
+        .expect(200);
+      expect(res.body.version).toBe(3);
+    });
+
     it('raises the version and applies to later saves', async () => {
       const res = await as(admin, 'put', '/api/v1/admin/vital-types/PULSE')
         .send({ minValid: 40, maxValid: 180 })

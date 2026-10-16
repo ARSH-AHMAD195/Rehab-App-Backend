@@ -2,6 +2,7 @@ import request from 'supertest';
 import { DateTime } from 'luxon';
 import { ERROR_CODES, DETAIL_CODES, DAY_STATUS, READING_STATUS } from '../src/common/constants';
 import { EVENT_TYPES } from '../src/common/constants';
+import { UsersService } from '../src/users/users.service';
 import { TestContext, TestUser, createTestApp } from './helpers/test-app';
 
 const ZONE = 'Asia/Kolkata';
@@ -177,6 +178,39 @@ describe('Patient vitals (v1.1 /me/vitals)', () => {
       // Same loggedAt, so the value was not re-stamped.
       expect(second.body.readings.PAIN.loggedAt).toBe(first.body.readings.PAIN.loggedAt);
       // No second audit entry and no second event.
+      await expect(
+        ctx.connection.collection('auditLogs').countDocuments({ action: 'VITALS_VALUE_CHANGED' }),
+      ).resolves.toBe(1);
+      await expect(
+        ctx.connection.collection('outboxEvents').countDocuments({ type: EVENT_TYPES.LOG_UPDATED }),
+      ).resolves.toBe(1);
+    });
+
+    it('stays idempotent when a retry runs while the first request is still in flight', async () => {
+      // Hold both requests after their first read of the log, so neither has seen the other's write.
+      let arrived = 0;
+      let release!: () => void;
+      const bothRead = new Promise<void>((resolve) => (release = resolve));
+      const users = ctx.app.get(UsersService);
+      const doctorIdsForPatient = users.doctorIdsForPatient.bind(users);
+      const spy = jest.spyOn(users, 'doctorIdsForPatient').mockImplementation(async (id) => {
+        if (++arrived === 2) release();
+        await Promise.race([bothRead, new Promise((resolve) => setTimeout(resolve, 2000))]);
+        return doctorIdsForPatient(id);
+      });
+
+      try {
+        const body = { date: today(), readings: { PULSE: { num: 76 } } };
+        const [first, second] = await Promise.all([
+          asPatient('put', '/api/v1/me/vitals/today').send(body),
+          asPatient('put', '/api/v1/me/vitals/today').send(body),
+        ]);
+        expect([first.status, second.status]).toEqual([200, 200]);
+        expect(second.body.readings.PULSE.loggedAt).toBe(first.body.readings.PULSE.loggedAt);
+      } finally {
+        spy.mockRestore();
+      }
+
       await expect(
         ctx.connection.collection('auditLogs').countDocuments({ action: 'VITALS_VALUE_CHANGED' }),
       ).resolves.toBe(1);
