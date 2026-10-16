@@ -43,7 +43,10 @@ Open `.env` and set:
 
 ```
 FIREBASE_PROJECT_ID=rehab-app-development
+SWAGGER_ENABLED=true
 ```
+
+`SWAGGER_ENABLED=true` turns on the API docs page. It is only for your own computer: the page has no login, so it stays off on real servers.
 
 Start **Docker Desktop** and wait until it says "Engine running". Then run:
 

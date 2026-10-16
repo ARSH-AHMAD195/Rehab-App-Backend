@@ -19,7 +19,8 @@ npm run start:dev
 ```
 
 - API: `http://localhost:3000/api/v1`
-- Swagger: `http://localhost:3000/api/docs`
+- Swagger: `http://localhost:3000/api/docs`, when `SWAGGER_ENABLED=true`. Off by default: the page
+  is outside the auth guard, so enable it only for local development.
 
 **The replica set is not optional.** v1.1's save flow writes the daily log, its status, alerts,
 audit entries and outbox events in one transaction, and MongoDB only supports multi-document

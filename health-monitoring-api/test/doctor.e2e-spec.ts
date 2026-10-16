@@ -250,6 +250,24 @@ describe('Doctor endpoints and the alert lifecycle (v1.1 /doctor)', () => {
       expect(res.body.code).toBe(ERROR_CODES.VALIDATION_FAILED);
     });
 
+    it('treats a profile zone that is not IANA as the default zone, everywhere', async () => {
+      const ist = await ctx.createUser({
+        uid: 'pat-ist',
+        role: 'PATIENT',
+        name: 'Kiran Rao',
+        // Windows' name for Asia/Kolkata - not an IANA zone. (Node accepts "IST" itself.)
+        timeZone: 'India Standard Time',
+        doctorIds: [doctor.id],
+      });
+      await setLimit({ field: null, low: null, high: 6, severity: 'MEDIUM' });
+      await as(ist, 'put', '/api/v1/me/vitals/today').send({ date: today(), readings: { PAIN: { num: 7 } } }).expect(200);
+
+      const queue = await as(doctor, 'get', `/api/v1/doctor/alerts?patientId=${ist.id}`).expect(200);
+      expect(queue.body.data[0].createdAt).toMatch(/\+05:30$/);
+      expect(queue.body.data[0].updatedAt).toMatch(/\+05:30$/);
+      await as(doctor, 'get', `/api/v1/doctor/patients/${ist.id}/vitals/today`).expect(200);
+    });
+
     it('keeps the alert open when the value is edited back into range', async () => {
       await setLimit({ field: null, low: null, high: 6, severity: 'MEDIUM' });
       await save({ PAIN: { num: 7 } });

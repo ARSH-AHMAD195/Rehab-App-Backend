@@ -37,7 +37,10 @@ async function bootstrap(): Promise<void> {
   // Fail the boot, not the first request, when Firebase is misconfigured.
   app.get(FirebaseTokenVerifier).assertConfigured();
 
-  if (config.get<string>('SWAGGER_ENABLED', 'true') === 'true') {
+  // Off unless asked for: the docs page is plain Express middleware, outside
+  // the auth guard, so leaving it on would publish the API to anyone.
+  const docsEnabled = config.get<string>('SWAGGER_ENABLED', 'false') === 'true';
+  if (docsEnabled) {
     // v1.1 Conventions: "Docs - Swagger UI at /api/docs".
     const document = SwaggerModule.createDocument(
       app,
@@ -58,7 +61,7 @@ async function bootstrap(): Promise<void> {
 
   const port = config.get<number>('PORT', 3000);
   await app.listen(port);
-  logger.log(`Health Monitoring API listening on :${port} (docs at /api/docs)`);
+  logger.log(`Health Monitoring API listening on :${port}${docsEnabled ? ' (docs at /api/docs)' : ''}`);
 }
 
 void bootstrap();
