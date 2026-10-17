@@ -6,20 +6,25 @@ import { UsersModule } from '../users/users.module';
 import { VitalTypesModule } from '../vital-types/vital-types.module';
 import { DailyLog, DailyLogSchema } from './daily-log.schema';
 import { DailyLogsService } from './daily-logs.service';
+import { IdempotencyKey, IdempotencyKeySchema } from './idempotency-key.schema';
+import { IdempotencyService } from './idempotency.service';
 import { ReadingsValidatorService } from './readings-validator.service';
 import { MeVitalsController } from './me-vitals.controller';
 import { DoctorVitalsController } from './doctor-vitals.controller';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: DailyLog.name, schema: DailyLogSchema }]),
+    MongooseModule.forFeature([
+      { name: DailyLog.name, schema: DailyLogSchema },
+      { name: IdempotencyKey.name, schema: IdempotencyKeySchema },
+    ]),
     VitalTypesModule,
     ThresholdsModule,
     AlertsModule,
     UsersModule,
   ],
   controllers: [MeVitalsController, DoctorVitalsController],
-  providers: [DailyLogsService, ReadingsValidatorService],
+  providers: [DailyLogsService, ReadingsValidatorService, IdempotencyService],
   exports: [DailyLogsService],
 })
 export class DailyLogsModule {}

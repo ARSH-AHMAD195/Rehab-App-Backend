@@ -20,6 +20,13 @@ export const ERROR_CODES = {
    * response to a lost race.
    */
   CONCURRENT_UPDATE: 'CONCURRENT_UPDATE',
+  /**
+   * NOT IN v1.1 - need rows in the Errors table. Idempotency-Key on
+   * PUT /me/vitals/today: the key is still being processed by an earlier
+   * request (409, retry shortly), or was used with a different body (422).
+   */
+  IDEMPOTENCY_KEY_IN_USE: 'IDEMPOTENCY_KEY_IN_USE',
+  IDEMPOTENCY_KEY_REUSED: 'IDEMPOTENCY_KEY_REUSED',
   RATE_LIMITED: 'RATE_LIMITED',
   INTERNAL: 'INTERNAL',
 } as const;

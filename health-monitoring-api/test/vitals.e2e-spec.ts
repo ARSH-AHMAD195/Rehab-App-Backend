@@ -3,6 +3,7 @@ import { DateTime } from 'luxon';
 import { ERROR_CODES, DETAIL_CODES, DAY_STATUS, READING_STATUS } from '../src/common/constants';
 import { EVENT_TYPES } from '../src/common/constants';
 import { UsersService } from '../src/users/users.service';
+import { DailyLogsService } from '../src/daily-logs/daily-logs.service';
 import { TestContext, TestUser, createTestApp } from './helpers/test-app';
 
 const ZONE = 'Asia/Kolkata';
@@ -217,6 +218,88 @@ describe('Patient vitals (v1.1 /me/vitals)', () => {
       await expect(
         ctx.connection.collection('outboxEvents').countDocuments({ type: EVENT_TYPES.LOG_UPDATED }),
       ).resolves.toBe(1);
+    });
+
+    describe('with an Idempotency-Key', () => {
+      const saveWithKey = (key: string, readings: Record<string, unknown>) =>
+        asPatient('put', '/api/v1/me/vitals/today').set('Idempotency-Key', key).send({ date: today(), readings });
+      const count = (collection: string, filter: object) =>
+        ctx.connection.collection(collection).countDocuments(filter);
+
+      it('a retry after a timeout gets the first answer back and is not saved again', async () => {
+        const first = await saveWithKey('save-1', { PULSE: { num: 76 } }).expect(200);
+        // Another save changes the value in between, so a re-applied retry would show.
+        await asPatient('put', '/api/v1/me/vitals/today')
+          .send({ date: today(), readings: { PULSE: { num: 80 } } })
+          .expect(200);
+
+        const retry = await saveWithKey('save-1', { PULSE: { num: 76 } }).expect(200);
+
+        expect(retry.body).toEqual(first.body);
+        const log = await ctx.connection.collection('dailyLogs').findOne({});
+        expect(log!.readings.PULSE.value).toEqual({ num: 80 });
+        await expect(count('auditLogs', { action: 'VITALS_VALUE_CHANGED' })).resolves.toBe(2);
+      });
+
+      it('two requests with the same key at once: one saves, the other is told to retry', async () => {
+        // A slow save keeps the first request running while the second arrives.
+        const logs = ctx.app.get(DailyLogsService);
+        const save = logs.save.bind(logs);
+        const spy = jest.spyOn(logs, 'save').mockImplementation(async (...args) => {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          return save(...args);
+        });
+        let a: request.Response;
+        let b: request.Response;
+        try {
+          [a, b] = await Promise.all([
+            saveWithKey('save-2', { PAIN: { num: 4 } }),
+            saveWithKey('save-2', { PAIN: { num: 4 } }),
+          ]);
+        } finally {
+          spy.mockRestore();
+        }
+
+        expect([a.status, b.status].sort()).toEqual([200, 409]);
+        const refused = a.status === 409 ? a : b;
+        expect(refused.body.code).toBe(ERROR_CODES.IDEMPOTENCY_KEY_IN_USE);
+        await expect(count('auditLogs', { action: 'VITALS_VALUE_CHANGED' })).resolves.toBe(1);
+        await expect(count('outboxEvents', { type: EVENT_TYPES.LOG_UPDATED })).resolves.toBe(1);
+
+        // Retrying once the first has finished returns its answer.
+        const retry = await saveWithKey('save-2', { PAIN: { num: 4 } }).expect(200);
+        expect(retry.body.readings.PAIN.value).toEqual({ num: 4 });
+      });
+
+      it('refuses the same key with a different body with 422', async () => {
+        await saveWithKey('save-3', { PAIN: { num: 4 } }).expect(200);
+        const res = await saveWithKey('save-3', { PAIN: { num: 9 } }).expect(422);
+        expect(res.body.code).toBe(ERROR_CODES.IDEMPOTENCY_KEY_REUSED);
+        await expect(count('auditLogs', { action: 'VITALS_VALUE_CHANGED' })).resolves.toBe(1);
+      });
+
+      it('a request that failed does not use up its key', async () => {
+        await saveWithKey('save-4', { PAIN: { num: 99 } }).expect(400);
+        await saveWithKey('save-4', { PAIN: { num: 4 } }).expect(200);
+      });
+
+      it('keys belong to one patient', async () => {
+        const other = await ctx.createUser({ uid: 'pat-2', role: 'PATIENT', name: 'Anita', timeZone: ZONE });
+        await saveWithKey('shared', { PAIN: { num: 4 } }).expect(200);
+        await http()
+          .put('/api/v1/me/vitals/today')
+          .set('Authorization', `Bearer ${ctx.token(other)}`)
+          .set('Idempotency-Key', 'shared')
+          .send({ date: today(), readings: { PAIN: { num: 5 } } })
+          .expect(200);
+      });
+
+      it('rejects an empty or over-long key', async () => {
+        for (const key of [' ', 'x'.repeat(256)]) {
+          const res = await saveWithKey(key, { PAIN: { num: 4 } }).expect(400);
+          expect(res.body.details[0]).toMatchObject({ field: 'Idempotency-Key' });
+        }
+      });
     });
 
     it('clears a value with null and puts it back to NOT_YET', async () => {

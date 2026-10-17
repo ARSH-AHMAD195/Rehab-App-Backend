@@ -73,6 +73,28 @@ export class ConcurrentUpdateException extends ApiException {
   }
 }
 
+/** An earlier request with this Idempotency-Key hasn't finished; retry shortly to get its answer. */
+export class IdempotencyKeyInUseException extends ApiException {
+  constructor() {
+    super(
+      HttpStatus.CONFLICT,
+      ERROR_CODES.IDEMPOTENCY_KEY_IN_USE,
+      'A request with this Idempotency-Key is still being processed. Retry in a moment.',
+    );
+  }
+}
+
+/** The Idempotency-Key was already used for a different request body - a client bug. */
+export class IdempotencyKeyReusedException extends ApiException {
+  constructor() {
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      ERROR_CODES.IDEMPOTENCY_KEY_REUSED,
+      'This Idempotency-Key was already used with a different request body. Use a new key for a new save.',
+    );
+  }
+}
+
 export class AlertAlreadyAcknowledgedException extends ApiException {
   constructor() {
     super(

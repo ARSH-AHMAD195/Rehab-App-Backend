@@ -1,20 +1,23 @@
-import { Body, Controller, Get, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Put, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiConflictResponse,
   ApiForbiddenResponse,
+  ApiHeader,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
   ApiTooManyRequestsResponse,
+  ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 import { RATE_LIMITS, ROLES } from '../common/constants';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../users/users.service';
 import { DailyLogsService } from './daily-logs.service';
+import { IdempotencyService } from './idempotency.service';
 import { DailyLogResponse, LogListResponse, SaveLogResponse } from './log.response';
 import { TrendResponse } from './trend.response';
 import { LogsQueryDto, SaveTodayDto, TrendsQueryDto } from './dto';
@@ -29,7 +32,10 @@ import { LogsQueryDto, SaveTodayDto, TrendsQueryDto } from './dto';
 @Roles(ROLES.PATIENT)
 @Controller('me/vitals')
 export class MeVitalsController {
-  constructor(private readonly logs: DailyLogsService) {}
+  constructor(
+    private readonly logs: DailyLogsService,
+    private readonly idempotency: IdempotencyService,
+  ) {}
 
   @Get('today')
   @ApiOperation({ summary: "Today's log with status, to pre-fill the form and Health tab" })
@@ -49,18 +55,34 @@ export class MeVitalsController {
     summary: 'Save or update some or all of today’s readings',
     description:
       'Send only the fields that changed; fields you don’t send stay as they are, and null ' +
-      'clears a value. Re-sending the same body is a no-op, so the request is idempotent and ' +
-      'needs no Idempotency-Key.',
+      'clears a value. Re-sending the same body changes nothing. For retries after a timeout, ' +
+      'send an Idempotency-Key: a retry with the same key gets the first answer back and ' +
+      'saves nothing, even if the log changed in between.',
+  })
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: false,
+    description:
+      'Optional. A unique id per save attempt (e.g. a UUID), the same on every retry of it. ' +
+      'Remembered for 24 hours, per patient. 1-255 visible ASCII characters.',
   })
   @ApiOkResponse({ type: SaveLogResponse })
   @ApiBadRequestResponse({ description: 'VALIDATION_FAILED' })
-  @ApiConflictResponse({ description: 'DAY_CHANGED - the date sent is no longer the patient’s today' })
+  @ApiConflictResponse({
+    description:
+      'DAY_CHANGED - the date sent is no longer the patient’s today; ' +
+      'IDEMPOTENCY_KEY_IN_USE - a request with this key is still running, retry shortly',
+  })
+  @ApiUnprocessableEntityResponse({
+    description: 'IDEMPOTENCY_KEY_REUSED - this key was already used with a different body',
+  })
   @ApiTooManyRequestsResponse({ description: 'RATE_LIMITED' })
   async save(
     @CurrentUser() patient: AuthUser,
     @Body() body: SaveTodayDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<SaveLogResponse> {
-    return this.logs.save(patient, body);
+    return this.idempotency.run(patient.id, idempotencyKey, body, () => this.logs.save(patient, body));
   }
 
   @Get('logs')
