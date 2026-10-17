@@ -1,0 +1,27 @@
+# Single-node MongoDB replica set - the SAME database Health Monitoring uses
+# (identical to health-monitoring-api/docker-compose.yml, same container name).
+# If that one is already running, do not start this one: both APIs share it.
+# A replica set is required for transactions (a change and its audit record
+# are saved together).
+services:
+  mongo:
+    image: mongo:7
+    container_name: ffs-health-mongo
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      # Initiates the replica set on first boot, then reports healthy.
+      test: >
+        mongosh --quiet --eval "
+          try { rs.status().ok }
+          catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'localhost:27017'}]}).ok }
+        "
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+volumes:
+  mongo-data:
