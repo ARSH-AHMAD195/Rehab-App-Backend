@@ -31,7 +31,10 @@ async function bootstrap(): Promise<void> {
   // Fail the boot, not the first request, when Firebase is misconfigured.
   app.get(FirebaseIdentityProvider).assertConfigured();
 
-  if (config.get<string>('SWAGGER_ENABLED', 'true') === 'true') {
+  // Off unless asked for: the docs page is plain Express middleware, outside
+  // the auth guard, so leaving it on would publish the API to anyone.
+  const docsEnabled = config.get<string>('SWAGGER_ENABLED', 'false') === 'true';
+  if (docsEnabled) {
     const document = SwaggerModule.createDocument(
       app,
       new DocumentBuilder()
@@ -51,7 +54,7 @@ async function bootstrap(): Promise<void> {
 
   const port = config.get<number>('PORT', 3001);
   await app.listen(port);
-  logger.log(`Auth API listening on :${port} (docs at /api/docs)`);
+  logger.log(`Auth API listening on :${port}${docsEnabled ? ' (docs at /api/docs)' : ''}`);
 }
 
 void bootstrap();

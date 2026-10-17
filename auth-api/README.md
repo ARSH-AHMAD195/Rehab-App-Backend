@@ -22,7 +22,8 @@ npm run start:dev
 ```
 
 - API: `http://localhost:3001/api/v1` (port 3001, so it runs next to Health Monitoring on 3000)
-- Swagger: `http://localhost:3001/api/docs`
+- Swagger: `http://localhost:3001/api/docs`, when `SWAGGER_ENABLED=true`. Off by default: the page
+  is outside the auth guard, so enable it only for local development.
 
 **Same database as Health Monitoring.** Both APIs use `ffs_health` and its `users` collection, so
 a patient registered here can log vitals there, and a doctor link set here gives access there.

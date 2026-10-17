@@ -29,7 +29,10 @@ In the `auth-api/` folder, copy `.env.example` to `.env`, then fill in:
 FIREBASE_PROJECT_ID=rehab-app-development
 FIREBASE_WEB_API_KEY=<the Web API key from step 2>
 FIREBASE_TEST_PASSWORD=<a password of your choice, for test logins>
+SWAGGER_ENABLED=true
 ```
+
+`SWAGGER_ENABLED=true` turns on the API docs page. It is only for your own computer: the page has no login, so it stays off on real servers.
 
 `.env` is git-ignored. Never commit it.
 
