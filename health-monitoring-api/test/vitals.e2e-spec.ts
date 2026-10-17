@@ -274,7 +274,7 @@ describe('Patient vitals (v1.1 /me/vitals)', () => {
       it('refuses the same key with a different body with 422', async () => {
         await saveWithKey('save-3', { PAIN: { num: 4 } }).expect(200);
         const res = await saveWithKey('save-3', { PAIN: { num: 9 } }).expect(422);
-        expect(res.body.code).toBe(ERROR_CODES.IDEMPOTENCY_KEY_REUSED);
+        expect(res.body).toMatchObject({ code: ERROR_CODES.IDEMPOTENCY_KEY_REUSED, error: 'Unprocessable Entity' });
         await expect(count('auditLogs', { action: 'VITALS_VALUE_CHANGED' })).resolves.toBe(1);
       });
 

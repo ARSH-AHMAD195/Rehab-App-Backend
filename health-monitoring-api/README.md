@@ -19,6 +19,8 @@ npm run start:dev
 ```
 
 - API: `http://localhost:3000/api/v1`
+- How the API behaves (errors, paging, dates, rate limits, retries, versions, audit):
+  [docs/API_BEHAVIOUR.md](docs/API_BEHAVIOUR.md)
 - Swagger: `http://localhost:3000/api/docs`, when `SWAGGER_ENABLED=true`. Off by default: the page
   is outside the auth guard, so enable it only for local development.
 
