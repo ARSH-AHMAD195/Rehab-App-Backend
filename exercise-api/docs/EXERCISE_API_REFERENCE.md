@@ -1,6 +1,6 @@
 # Exercise API — reference (draft for review)
 
-**Status:** draft, for team review before any code is written.
+**Status:** draft, being built step by step (see section 10).
 **Sources:** SRS sections *Exercise & Prehabilitation*, *Doctor Portal*, *Administration Portal*,
 *Critical Role-Based Workflows* and *Key Business Rules*; routes from
 `docs/Fit_for_Surgery_API_Reference.pdf` (sections C, D and J).
@@ -81,15 +81,19 @@ Seeded: `WALKING`, `STRENGTH`, `BREATHING`, `STRETCHING` (the four named in the 
   "categoryId": "…",
   "description": "Strengthens the thigh muscles.",
   "instructions": ["Sit upright", "Straighten one knee slowly", "Hold for 3 seconds"],
-  "video": { "provider": "YOUTUBE", "videoId": "<YouTube video id>" },
+  "category": "STRENGTH",
+  "video": { "provider": "YOUTUBE", "videoId": "dQw4w9WgXcQ", "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ" },
   "active": true,
   "createdAt": "2026-10-20T10:00:00+05:30",
   "updatedAt": "2026-10-20T10:00:00+05:30"
 }
 ```
 
-- `video` is optional (`null` until the client supplies the link). We store the YouTube id;
-  the app plays it.
+- `video` is optional (`null` until the client supplies the link). The admin sends
+  `videoUrl`: any YouTube watch, share (youtu.be), embed or shorts link, or a bare video id
+  (`null` removes the video). We store only the provider and id; the app plays it. Anything
+  that isn't a YouTube video link is refused with `WRONG_SHAPE`. Checking that the video
+  actually plays (exists, Unlisted or Public, embedding allowed) isn't built yet. ⏳ *Videos*
 - Deleting an exercise **deactivates** it (`active: false`), so history and old plans never
   break. ⏳ *Deletion policy*
 
@@ -151,14 +155,14 @@ Health Monitoring.
 
 | Method | Path | Who | What it does |
 |---|---|---|---|
-| GET | `/exercise-categories` | All | List active categories |
-| POST | `/exercise-categories` | Admin | Add a category |
-| PATCH | `/exercise-categories/:categoryId` | Admin | Rename, reorder, deactivate |
+| GET | `/exercise-categories` | All | List active categories (admin: `?includeInactive=true` for all) |
+| POST | `/exercise-categories` | Admin | Add a category (`code`, `name`, optional `order`) |
+| PATCH | `/exercise-categories/:categoryId` | Admin | Rename, reorder, deactivate, reactivate. The code can't change |
 | DELETE | `/exercise-categories/:categoryId` | Admin | Deactivate (refused while active exercises use it) |
-| GET | `/exercises` | All | Admin and doctor: the library (filter by `category`, `active`, search `q`; paged). **Patient: only exercises in their current plan** |
-| GET | `/exercises/:exerciseId` | All | One exercise. A patient gets 404 unless it's in their plan |
-| POST | `/exercises` | Admin | Add an exercise |
-| PATCH | `/exercises/:exerciseId` | Admin | Change it, including the video |
+| GET | `/exercises` | All | Admin and doctor: the library, A to Z (filter by `category` code, `active=true\|false`, search `q`; paged). **Patient: only exercises in their current plan** |
+| GET | `/exercises/:exerciseId` | All | One exercise, active or not. A patient gets 404 unless it's in their plan |
+| POST | `/exercises` | Admin | Add an exercise (`name`, `categoryId`, optional `description`, `instructions`, `videoUrl`) |
+| PATCH | `/exercises/:exerciseId` | Admin | Change it, including the video; `active: true` brings it back |
 | DELETE | `/exercises/:exerciseId` | Admin | Deactivate it |
 
 ### Plans
@@ -260,7 +264,9 @@ Same format and codes as Health Monitoring, plus:
 |---|---|---|
 | 409 | `EXERCISE_NOT_IN_PLAN` | A completion for an exercise that isn't in the patient's current plan |
 | 409 | `EXERCISE_ALREADY_DONE` | Already done the planned number of times today |
-| 400 | `VALIDATION_FAILED` with `details[].code = NOT_ALLOWED` | Assigning a deactivated exercise, or deactivating a category that's in use |
+| 400 | `VALIDATION_FAILED` with `details[].code = NOT_ALLOWED` | Using a deactivated exercise or category, or deactivating a category that's in use |
+| 400 | `VALIDATION_FAILED` with `details[].code = UNKNOWN_ID` | An id that points at nothing, e.g. an unknown `categoryId` |
+| 400 | `VALIDATION_FAILED` with `details[].code = ALREADY_EXISTS` | A category code that's already taken |
 
 ---
 
@@ -303,7 +309,7 @@ These are in the SRS but belong to other modules. This API provides the data the
 
 | Topic | Question | Default until answered |
 |---|---|---|
-| **Videos** | The SRS says *private* YouTube videos. Private videos only play for invited Google accounts, so they won't play for patients in the app. Can they be *unlisted* instead? | Store the YouTube id; the app plays it |
+| **Videos** | The SRS says *private* YouTube videos. Private videos only play for invited Google accounts, so they won't play for patients in the app; *Unlisted* plays for anyone with the link. Will the clinic upload its own videos as Unlisted, or use other channels' videos? | Store the YouTube id; the app plays it. No check yet that the video plays |
 | **Plan structure** | How is a plan described: days of the week, times per day, sets, reps, minutes? Do plans have start and end dates or phases? | Days of week + times per day; optional sets / reps / minutes; no dates |
 | **What the patient records** | Just "done", or also minutes, difficulty or pain? | Just "done"; `details` accepted but optional |
 | **Compliance formula** | How is the compliance percentage worked out? | Counts only; percentage `null` |
@@ -316,7 +322,8 @@ These are in the SRS but belong to other modules. This API provides the data the
 
 ## 10. Build order
 
-1. Project setup, categories and the library (admin)
+1. Project setup, categories and the library (admin) — **done**. Patients get 403 on the
+   library routes until step 2 gives them their plan-only view.
 2. Plans (doctor assigns; patient and doctor view)
 3. Today's checklist, completions and history
 4. Compliance counts
