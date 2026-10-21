@@ -321,6 +321,9 @@ describe('Exercise plans', () => {
 
       await as(patient).get(`/exercises/${kneeId}`).expect(200);
       await as(patient).get(`/exercises/${breathId}`).expect(404);
+      // The same id in capitals is the same exercise, as it is for a doctor.
+      await as(patient).get(`/exercises/${kneeId.toUpperCase()}`).expect(200);
+      await as(doctor).get(`/exercises/${kneeId.toUpperCase()}`).expect(200);
 
       // Filters still work inside the plan.
       const walking = await as(patient).get('/exercises?category=WALKING').expect(200);

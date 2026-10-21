@@ -10,7 +10,7 @@ import { ThrottlerException } from '@nestjs/throttler';
 import { Response } from 'express';
 import { mongo } from 'mongoose';
 import { ApiException, ErrorDetail } from '../api.exception';
-import { ERROR_CODES, ErrorCode } from '../constants';
+import { ERROR_CODES, ErrorCode, MAX_BODY_SIZE } from '../constants';
 import { currentRequestId } from '../context/request-context';
 
 interface ErrorBody {
@@ -74,6 +74,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
       );
     }
 
+    // Raised by the JSON body parser in main.ts, before Nest is involved, so
+    // it is not an HttpException. Malformed JSON already arrives as one.
+    if (isBodyTooLarge(exception)) {
+      return this.build(
+        HttpStatus.PAYLOAD_TOO_LARGE,
+        ERROR_CODES.PAYLOAD_TOO_LARGE,
+        `Request body is larger than ${MAX_BODY_SIZE}`,
+        requestId,
+      );
+    }
+
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
       const payload = exception.getResponse();
@@ -133,6 +144,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
       ...(details?.length ? { details } : {}),
     };
   }
+}
+
+/** body-parser's error for a body over its limit (an http-errors PayloadTooLargeError). */
+function isBodyTooLarge(exception: unknown): boolean {
+  return (exception as { type?: unknown })?.type === 'entity.too.large';
 }
 
 const HTTP_REASONS: Record<number, string> = {

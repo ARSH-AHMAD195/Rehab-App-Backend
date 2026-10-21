@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, Types } from 'mongoose';
 import { AUDIT_ACTIONS, DEFAULT_PAGE_LIMIT, DETAIL_CODES, EVENT_TYPES } from '../common/constants';
@@ -15,6 +15,7 @@ import { OutboxService } from '../outbox/outbox.service';
 import { DayService } from '../time/day.service';
 import { AuthUser, UsersService } from '../users/users.service';
 import { ExercisesService } from '../exercises/exercises.service';
+import { ExerciseResponse } from '../exercises/exercise.dto';
 import { ExercisePlan, ExercisePlanDocument, PlanItem } from './plan.schema';
 import {
   PlanItemDto,
@@ -35,7 +36,7 @@ interface StoredItem {
 }
 
 @Injectable()
-export class PlansService {
+export class PlansService implements OnModuleInit {
   constructor(
     @InjectModel(ExercisePlan.name) private readonly model: Model<ExercisePlan>,
     private readonly exercises: ExercisesService,
@@ -45,6 +46,14 @@ export class PlansService {
     private readonly outbox: OutboxService,
     private readonly tx: TransactionRunner,
   ) {}
+
+  /**
+   * The unique indexes are what let only one of two simultaneous saves in, and
+   * keep one current version per patient. Wait for them before taking requests.
+   */
+  async onModuleInit(): Promise<void> {
+    await this.model.init();
+  }
 
   /**
    * PUT /patients/:patientId/exercise-plan. Saves the items as a new version.
@@ -158,9 +167,11 @@ export class PlansService {
     await this.recordView(doctor, patientId, null);
 
     const timeZone = await this.zoneOf(patientId);
+    // One lookup for every exercise on the page, not one per version.
+    const exercises = await this.exercises.responsesByIds(page.flatMap((plan) => plan.items.map((item) => item.exerciseId)));
     const last = page[page.length - 1];
     return {
-      data: await Promise.all(page.map((plan) => this.respond(patientId, plan, timeZone))),
+      data: await Promise.all(page.map((plan) => this.respond(patientId, plan, timeZone, exercises))),
       nextCursor: rows.length > limit && last ? encodeCursor({ k: String(last.version), id: String(last._id) }) : null,
     };
   }
@@ -188,17 +199,30 @@ export class PlansService {
       .exec();
   }
 
-  /** Every version saved before `before`, oldest first: what compliance walks through day by day. */
-  versionsBefore(patientId: string, before: Date): Promise<ExercisePlanDocument[]> {
-    return this.model
-      .find({ patientId: new Types.ObjectId(patientId), createdAt: { $lt: before } })
-      .sort({ version: 1 })
-      .exec();
+  /**
+   * The versions that applied at some point between `from` and `to` (UTC),
+   * oldest first: what compliance walks through day by day. That is the one
+   * in place when `from` began, plus any saved during the range - not the
+   * patient's whole history.
+   */
+  async versionsBetween(patientId: string, from: Date, to: Date): Promise<ExercisePlanDocument[]> {
+    const patient = new Types.ObjectId(patientId);
+    const [inPlace, during] = await Promise.all([
+      this.model.findOne({ patientId: patient, createdAt: { $lt: from } }).sort({ version: -1 }).exec(),
+      this.model.find({ patientId: patient, createdAt: { $gte: from, $lt: to } }).sort({ version: 1 }).exec(),
+    ]);
+    return inPlace ? [inPlace, ...during] : during;
   }
 
-  /** The plan's items with each exercise's library details, live. */
-  async itemsWithExercises(plan: ExercisePlanDocument): Promise<PlanItemResponse[]> {
-    const exercises = await this.exercises.responsesByIds(plan.items.map((item) => item.exerciseId));
+  /**
+   * The plan's items with each exercise's library details, live. Pass
+   * `exercises` when they were already looked up for several plans at once.
+   */
+  async itemsWithExercises(
+    plan: ExercisePlanDocument,
+    exercises?: Map<string, ExerciseResponse>,
+  ): Promise<PlanItemResponse[]> {
+    exercises ??= await this.exercises.responsesByIds(plan.items.map((item) => item.exerciseId));
     return plan.items.map((item) => {
       const stored = toStoredItem(item);
       const exercise = exercises.get(stored.exerciseId);
@@ -272,14 +296,19 @@ export class PlansService {
     });
   }
 
-  private async respond(patientId: string, plan: ExercisePlanDocument | null, timeZone?: string): Promise<PlanResponse> {
+  private async respond(
+    patientId: string,
+    plan: ExercisePlanDocument | null,
+    timeZone?: string,
+    exercises?: Map<string, ExerciseResponse>,
+  ): Promise<PlanResponse> {
     if (!plan) return { patientId, version: 0, items: [], assignedBy: null, updatedAt: null };
 
     const zone = timeZone ?? (await this.zoneOf(patientId));
     return {
       patientId,
       version: plan.version,
-      items: await this.itemsWithExercises(plan),
+      items: await this.itemsWithExercises(plan, exercises),
       assignedBy: { id: String(plan.assignedById), name: plan.assignedByName },
       updatedAt: this.day.toLocalIso(plan.createdAt, zone),
     };

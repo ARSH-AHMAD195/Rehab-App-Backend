@@ -297,6 +297,36 @@ describe('Exercise library (categories and exercises)', () => {
       expect(refused.body.details[0]).toMatchObject({ field: 'categoryId', code: DETAIL_CODES.NOT_ALLOWED });
     });
 
+    it('checks the category on a move even when the exercise is or becomes inactive', async () => {
+      const exercise = await addExercise();
+
+      // Moving and switching off in one request: the category must still be real.
+      const unknown = await as(admin)
+        .patch(`/exercises/${exercise.id}`)
+        .send({ categoryId: '6712a0b1c2d3e4f5a6b7c8d9', active: false })
+        .expect(400);
+      expect(unknown.body.details[0]).toMatchObject({ field: 'categoryId', code: DETAIL_CODES.UNKNOWN_ID });
+
+      // An exercise that is already off can't be moved into a switched-off category either.
+      await as(admin).delete(`/exercises/${exercise.id}`).expect(200);
+      const breathing = await categoryId('BREATHING');
+      await as(admin).delete(`/exercise-categories/${breathing}`).expect(200);
+      const inactive = await as(admin).patch(`/exercises/${exercise.id}`).send({ categoryId: breathing }).expect(400);
+      expect(inactive.body.details[0]).toMatchObject({ field: 'categoryId', code: DETAIL_CODES.NOT_ALLOWED });
+
+      // Nothing was changed, so it still reads back with its category code.
+      const stored = await as(admin).get(`/exercises/${exercise.id}`).expect(200);
+      expect(stored.body.category).toBe('STRENGTH');
+    });
+
+    it('answers an over-size body with 413, not a server error', async () => {
+      const res = await as(admin)
+        .post('/exercises')
+        .send({ name: 'X', categoryId: await categoryId('STRENGTH'), description: 'x'.repeat(40_000) })
+        .expect(413);
+      expect(res.body).toMatchObject({ statusCode: 413, code: ERROR_CODES.PAYLOAD_TOO_LARGE, error: 'Payload Too Large' });
+    });
+
     it('deactivates instead of deleting, and brings back only into an active category', async () => {
       const exercise = await addExercise();
 

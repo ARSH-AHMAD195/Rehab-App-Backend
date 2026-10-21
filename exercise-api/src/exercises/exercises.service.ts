@@ -75,11 +75,14 @@ export class ExercisesService implements OnModuleInit {
       if (!changed.length) return beforeResponse;
       const set = Object.fromEntries(changed.map((key) => [key, changes[key]]));
 
-      // Moving to a category, or coming back to life in one, needs that
-      // category to be active - and to stay so until this commits.
+      // Moving to a category needs that category to be active, whether or not
+      // the exercise is - otherwise an inactive exercise could point at no
+      // category at all, and could never be brought back. Coming back to life
+      // needs its category active too. Either way it must stay so until this
+      // commits.
       const categoryId = changes.categoryId ?? before.categoryId;
       const active = changes.active ?? before.active;
-      const needsActiveCategory = active && (changed.includes('categoryId') || changed.includes('active'));
+      const needsActiveCategory = changed.includes('categoryId') || (active && changed.includes('active'));
       if (needsActiveCategory) await this.categories.lockActive(categoryId, 'categoryId', session);
 
       const after = await this.model
@@ -101,7 +104,8 @@ export class ExercisesService implements OnModuleInit {
    * 404, so a patient can't find out what else is in the library.
    */
   async get(id: string, onlyIds?: Types.ObjectId[]): Promise<ExerciseResponse> {
-    const allowed = !onlyIds || onlyIds.some((planned) => String(planned) === id);
+    // ObjectIds print in lower case; the path may not, and must match all the same.
+    const allowed = !onlyIds || onlyIds.some((planned) => String(planned) === id.toLowerCase());
     const doc = allowed && Types.ObjectId.isValid(id) ? await this.model.findById(id).exec() : null;
     if (!doc) throw new NotFoundException('Exercise not found');
     return this.respond(doc);

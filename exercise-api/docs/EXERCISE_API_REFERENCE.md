@@ -310,6 +310,7 @@ Same format and codes as Health Monitoring, plus:
 | 409 | `EXERCISE_ALREADY_DONE` | Already done the planned number of times today |
 | 409 | `DAY_CHANGED` | A completion whose `date` isn't the patient's today, or undoing an earlier day's tick |
 | 409 / 422 | `IDEMPOTENCY_KEY_IN_USE` / `IDEMPOTENCY_KEY_REUSED` | Same as Health Monitoring |
+| 413 | `PAYLOAD_TOO_LARGE` | The request body is over 32 KB |
 | 400 | `VALIDATION_FAILED` with `details[].code = NOT_ALLOWED` | Using a deactivated exercise or category, or deactivating a category that's in use |
 | 400 | `VALIDATION_FAILED` with `details[].code = UNKNOWN_ID` | An id that points at nothing, e.g. an unknown `categoryId` |
 | 400 | `VALIDATION_FAILED` with `details[].code = ALREADY_EXISTS` | A category code that's already taken |

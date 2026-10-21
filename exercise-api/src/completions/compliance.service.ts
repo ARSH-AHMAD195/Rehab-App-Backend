@@ -42,7 +42,11 @@ export class ComplianceService {
     const { from, to } = this.checkedRange(patient.timeZone, query);
 
     const dates = this.datesBetween(from, to);
-    const versions = await this.plans.versionsBefore(patientId, this.day.startOfDay(this.day.shift(to, 1), patient.timeZone));
+    const versions = await this.plans.versionsBetween(
+      patientId,
+      this.day.startOfDay(from, patient.timeZone),
+      this.day.startOfDay(this.day.shift(to, 1), patient.timeZone),
+    );
     const ticks = await this.ticksByDayAndItem(patientId, from, to);
 
     const byDay: ComplianceResponse['byDay'] = [];
