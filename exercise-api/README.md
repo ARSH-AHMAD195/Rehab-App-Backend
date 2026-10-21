@@ -11,8 +11,10 @@ writes it.
 
 - Exercise categories (the four from the SRS are added on first start)
 - The exercise library, with a YouTube link per exercise
+- Plans: a doctor assigns a plan to a linked patient; every change is kept as a version; the
+  patient sees their plan and only the exercises in it
 
-Plans, the checklist, completions and compliance come next (reference, section 10).
+The checklist, completions and compliance come next (reference, section 10).
 
 ## Run it
 

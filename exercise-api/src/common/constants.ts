@@ -43,6 +43,28 @@ export const AUDIT_ACTIONS = {
 } as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
 
+/**
+ * Events, reference section 7. Same envelope as Health Monitoring; this API
+ * publishes and never calls other modules.
+ */
+export const EVENT_TYPES = {
+  PLAN_ASSIGNED: 'exercise.plan.assigned',
+  COMPLETED: 'exercise.completed',
+} as const;
+export type EventType = (typeof EVENT_TYPES)[keyof typeof EVENT_TYPES];
+
+export const EVENT_SCHEMA_VERSION = 1;
+
+/** Plan limits. ⏳ Plan structure is waiting for the client; these are defaults. */
+export const PLAN_LIMITS = {
+  ITEMS: 30,
+  TIMES_PER_DAY: 10,
+  SETS: 20,
+  REPS: 100,
+  DURATION_MIN: 240,
+  NOTES: 500,
+} as const;
+
 /** The four categories named in the SRS, created on first start. */
 export const DEFAULT_CATEGORIES = [
   { code: 'WALKING', name: 'Walking', order: 1 },

@@ -223,13 +223,16 @@ describe('Exercise library (categories and exercises)', () => {
         .expect(400);
     });
 
-    it('keeps the library away from patients, and edits away from doctors', async () => {
+    it('keeps the library away from patients without a plan, and edits away from doctors', async () => {
       const exercise = await addExercise();
 
-      for (const path of ['/exercises', `/exercises/${exercise.id}`]) {
-        const res = await as(patient).get(path).expect(403);
-        expect(res.body.code).toBe(ERROR_CODES.FORBIDDEN_ROLE);
-      }
+      // Patients only see exercises in their own plan; this one has none.
+      const list = await as(patient).get('/exercises').expect(200);
+      expect(list.body.data).toEqual([]);
+      const one = await as(patient).get(`/exercises/${exercise.id}`).expect(404);
+      expect(one.body.code).toBe(ERROR_CODES.NOT_FOUND);
+      await as(patient).post('/exercises').send({ name: 'X', categoryId: exercise.categoryId }).expect(403);
+
       await as(doctor).get('/exercises').expect(200);
       await as(doctor).get(`/exercises/${exercise.id}`).expect(200);
       await as(doctor).post('/exercises').send({ name: 'X', categoryId: exercise.categoryId }).expect(403);

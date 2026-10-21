@@ -2,8 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { IANAZone } from 'luxon';
-import { Model } from 'mongoose';
-import { Role } from '../common/constants';
+import { Model, Types } from 'mongoose';
+import { ROLES, Role } from '../common/constants';
 import { User, UserDocument } from './user.schema';
 
 /** The caller, as every guard and service below sees them. */
@@ -29,6 +29,32 @@ export class UsersService {
   async findByFirebaseUid(uid: string): Promise<AuthUser | null> {
     const user = await this.users.findOne({ firebaseUid: uid, active: true }).lean();
     return user ? this.toAuthUser(user as UserDocument) : null;
+  }
+
+  /**
+   * A doctor reaches only patients linked to them. One query answers both
+   * "does this patient exist" and "is it linked", so an unlinked patient and
+   * a missing one look the same from outside (both 404).
+   */
+  async isPatientLinkedToDoctor(patientId: string, doctorId: string): Promise<boolean> {
+    if (!Types.ObjectId.isValid(patientId)) return false;
+    const match = await this.users
+      .exists({
+        _id: new Types.ObjectId(patientId),
+        role: ROLES.PATIENT,
+        active: true,
+        doctorIds: new Types.ObjectId(doctorId),
+      })
+      .exec();
+    return match !== null;
+  }
+
+  async getPatient(patientId: string): Promise<AuthUser | null> {
+    if (!Types.ObjectId.isValid(patientId)) return null;
+    const patient = await this.users
+      .findOne({ _id: new Types.ObjectId(patientId), role: ROLES.PATIENT })
+      .lean();
+    return patient ? this.toAuthUser(patient as UserDocument) : null;
   }
 
   private toAuthUser(user: UserDocument): AuthUser {

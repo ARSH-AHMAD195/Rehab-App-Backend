@@ -9,6 +9,7 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { Types } from 'mongoose';
 import { ROLES } from '../common/constants';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -25,8 +26,9 @@ import {
 /**
  * The exercise library.
  *
- * Patients are kept out for now: the SRS says they must only ever see the
- * exercises in their own plan, never the library. Their view comes with plans.
+ * SRS: "Do not expose the full exercise library to patients as a substitute
+ * for doctor assignment." A patient gets the same routes, limited to the
+ * exercises in their own current plan.
  */
 @ApiTags('Exercise library')
 @ApiBearerAuth()
@@ -36,20 +38,18 @@ export class ExercisesController {
   constructor(private readonly exercises: ExercisesService) {}
 
   @Get()
-  @Roles(ROLES.ADMIN, ROLES.DOCTOR)
-  @ApiOperation({ summary: 'The library, A to Z (admin, doctor)' })
+  @ApiOperation({ summary: 'The library, A to Z. A patient sees only the exercises in their plan' })
   @ApiOkResponse({ type: ExerciseListResponse })
-  list(@Query() query: ListExercisesQueryDto): Promise<ExerciseListResponse> {
-    return this.exercises.list(query);
+  async list(@CurrentUser() caller: AuthUser, @Query() query: ListExercisesQueryDto): Promise<ExerciseListResponse> {
+    return this.exercises.list(query, await this.planOnly(caller));
   }
 
   @Get(':exerciseId')
-  @Roles(ROLES.ADMIN, ROLES.DOCTOR)
-  @ApiOperation({ summary: 'One exercise, active or not (admin, doctor)' })
+  @ApiOperation({ summary: 'One exercise, active or not. A patient gets 404 unless it is in their plan' })
   @ApiOkResponse({ type: ExerciseResponse })
   @ApiNotFoundResponse({ description: 'NOT_FOUND' })
-  get(@Param('exerciseId') id: string): Promise<ExerciseResponse> {
-    return this.exercises.get(id);
+  async get(@CurrentUser() caller: AuthUser, @Param('exerciseId') id: string): Promise<ExerciseResponse> {
+    return this.exercises.get(id, await this.planOnly(caller));
   }
 
   @Post()
@@ -82,5 +82,10 @@ export class ExercisesController {
   @ApiNotFoundResponse({ description: 'NOT_FOUND' })
   deactivate(@CurrentUser() admin: AuthUser, @Param('exerciseId') id: string): Promise<ExerciseResponse> {
     return this.exercises.deactivate(id, admin);
+  }
+
+  /** For a patient, the exercises they may see; for anyone else, no limit. */
+  private async planOnly(caller: AuthUser): Promise<Types.ObjectId[] | undefined> {
+    return caller.role === ROLES.PATIENT ? this.exercises.currentPlanExerciseIds(caller.id) : undefined;
   }
 }

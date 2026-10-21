@@ -62,7 +62,7 @@ extra code.
 | `exercisePlans` | Each patient's plan. One current version; older versions kept | Doctor |
 | `exerciseCompletions` | One record per "done" tick | Patient |
 | `auditLogs` | Shared with the other APIs | This API |
-| `outboxEvents` | Shared pattern with Health Monitoring | This API |
+| `exerciseOutboxEvents` | Events waiting to be sent. Same pattern as Health Monitoring's `outboxEvents`, but its own collection: each API's sender picks up everything in its collection, so sharing one would make each API send the other's events | This API |
 
 ### Category
 
@@ -123,8 +123,14 @@ Seeded: `WALKING`, `STRENGTH`, `BREATHING`, `STRETCHING` (the four named in the 
   ⏳ *Plan structure*
 - `target` is optional and free-form (sets, reps, minutes). It's shown to the patient; it isn't
   checked. ⏳ *Plan structure*
-- `itemId` stays the same across versions while the exercise stays in the plan, so
-  completions remain linked.
+- `itemId` is set by the server and stays the same across versions while the exercise stays
+  in the plan, so completions remain linked.
+- Each exercise appears at most once in a plan; `timesPerDay` says how often.
+- `exercise` holds the library's details live, so a video added later reaches the patient
+  straight away. If an admin deactivates an exercise that's already planned, it stays in the
+  plan with `active: false` until the doctor changes the plan.
+- A patient with no plan yet gets `version: 0`, an empty `items` list, and `assignedBy` and
+  `updatedAt` as `null`.
 
 ### Completion
 
@@ -188,7 +194,11 @@ Health Monitoring.
 - `version` is the version the doctor last saw (0 for a first plan). If someone else changed
   the plan since, the save is refused with `409 CONCURRENT_UPDATE`, so two doctors can't
   overwrite each other.
-- Every exercise must exist and be active. An empty `items` list clears the plan.
+- Every exercise must exist and be active (`UNKNOWN_ID` / `NOT_ALLOWED` on
+  `items.<n>.exerciseId`), and appear only once (`ALREADY_EXISTS`).
+- An empty `items` list clears the plan (as a new version).
+- Saving the same items again creates no new version, audit record or event.
+- A doctor's views of the plan and its versions are audited (`EXERCISE_PLAN_VIEWED`).
 
 ### Today's checklist *(proposed addition)*
 
@@ -322,9 +332,9 @@ These are in the SRS but belong to other modules. This API provides the data the
 
 ## 10. Build order
 
-1. Project setup, categories and the library (admin) — **done**. Patients get 403 on the
-   library routes until step 2 gives them their plan-only view.
-2. Plans (doctor assigns; patient and doctor view)
+1. Project setup, categories and the library (admin) — **done**
+2. Plans (doctor assigns; patient and doctor view), and the patient's plan-only view of
+   `/exercises` — **done**
 3. Today's checklist, completions and history
 4. Compliance counts
 5. A journey test with Auth and Health Monitoring, on one database

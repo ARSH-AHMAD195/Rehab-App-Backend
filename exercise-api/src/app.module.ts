@@ -15,6 +15,9 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { CategoriesModule } from './categories/categories.module';
 import { ExercisesModule } from './exercises/exercises.module';
+import { PlansModule } from './plans/plans.module';
+import { OutboxModule } from './outbox/outbox.module';
+import { TimeModule } from './time/time.module';
 
 @Module({
   imports: [
@@ -32,13 +35,16 @@ import { ExercisesModule } from './exercises/exercises.module';
       ],
     }),
 
+    TimeModule,
     MongoSupportModule,
     AuditModule,
+    OutboxModule,
     AuthModule,
     UsersModule,
 
     CategoriesModule,
     ExercisesModule,
+    PlansModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

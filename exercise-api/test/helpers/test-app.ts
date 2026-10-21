@@ -55,6 +55,8 @@ export async function createTestApp(): Promise<TestContext> {
   process.env.MONGODB_URI = uri;
   process.env.DEFAULT_TIME_ZONE = process.env.DEFAULT_TIME_ZONE ?? 'Asia/Kolkata';
   process.env.SWAGGER_ENABLED = 'false';
+  // Events stay in the outbox, where tests can look at them.
+  process.env.OUTBOX_PUBLISHER_DISABLED = 'true';
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(TOKEN_VERIFIER)
@@ -94,7 +96,7 @@ export async function createTestApp(): Promise<TestContext> {
       return { ...user, id: id.toString() };
     },
     async reset() {
-      for (const name of ['users', 'exerciseCategories', 'exercises', 'auditLogs']) {
+      for (const name of ['users', 'exerciseCategories', 'exercises', 'exercisePlans', 'auditLogs', 'exerciseOutboxEvents']) {
         await connection.collection(name).deleteMany({});
       }
       await app.get(CategoriesService).seedMissing();

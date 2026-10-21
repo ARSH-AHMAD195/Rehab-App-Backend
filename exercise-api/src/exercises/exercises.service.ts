@@ -17,6 +17,7 @@ import {
   UpdateExerciseDto,
 } from './exercise.dto';
 import { parseYouTubeVideoId, youTubeWatchUrl } from './youtube';
+import { ExercisePlan } from '../plans/plan.schema';
 
 /** The fields an admin edit can change, as stored. */
 type ExerciseChanges = Partial<Pick<Exercise, 'name' | 'sortKey' | 'categoryId' | 'description' | 'instructions' | 'video' | 'active'>>;
@@ -25,6 +26,7 @@ type ExerciseChanges = Partial<Pick<Exercise, 'name' | 'sortKey' | 'categoryId' 
 export class ExercisesService implements OnModuleInit {
   constructor(
     @InjectModel(Exercise.name) private readonly model: Model<Exercise>,
+    @InjectModel(ExercisePlan.name) private readonly plans: Model<ExercisePlan>,
     private readonly categories: CategoriesService,
     private readonly audit: AuditService,
     private readonly tx: TransactionRunner,
@@ -94,16 +96,27 @@ export class ExercisesService implements OnModuleInit {
     return this.update(id, { active: false }, actor);
   }
 
-  async get(id: string): Promise<ExerciseResponse> {
-    const doc = Types.ObjectId.isValid(id) ? await this.model.findById(id).exec() : null;
+  /**
+   * One exercise. With `onlyIds` (a patient's plan) anything outside it is a
+   * 404, so a patient can't find out what else is in the library.
+   */
+  async get(id: string, onlyIds?: Types.ObjectId[]): Promise<ExerciseResponse> {
+    const allowed = !onlyIds || onlyIds.some((planned) => String(planned) === id);
+    const doc = allowed && Types.ObjectId.isValid(id) ? await this.model.findById(id).exec() : null;
     if (!doc) throw new NotFoundException('Exercise not found');
     return this.respond(doc);
   }
 
-  /** The library for admins and doctors: by name, A to Z, a page at a time. */
-  async list(query: ListExercisesQueryDto): Promise<ExerciseListResponse> {
+  /**
+   * The library, by name, A to Z, a page at a time. Admins and doctors see all
+   * of it; a patient passes `onlyIds` (their plan) and sees just those, active
+   * or not, since a planned exercise stays in the plan if it's switched off.
+   */
+  async list(query: ListExercisesQueryDto, onlyIds?: Types.ObjectId[]): Promise<ExerciseListResponse> {
     const limit = query.limit ?? DEFAULT_PAGE_LIMIT;
-    const and: FilterQuery<Exercise>[] = [{ active: query.active ?? true }];
+    const and: FilterQuery<Exercise>[] = onlyIds
+      ? [{ _id: { $in: onlyIds } }, ...(query.active === undefined ? [] : [{ active: query.active }])]
+      : [{ active: query.active ?? true }];
 
     if (query.category) {
       const category = await this.categories.findByCode(query.category);
@@ -130,6 +143,29 @@ export class ExercisesService implements OnModuleInit {
       data: await this.respondMany(page),
       nextCursor: rows.length > limit && last ? encodeCursor({ k: last.sortKey, id: String(last._id) }) : null,
     };
+  }
+
+  /** The exercise ids in a patient's current plan: all a patient may see of the library. */
+  async currentPlanExerciseIds(patientId: string): Promise<Types.ObjectId[]> {
+    const plan = await this.plans
+      .findOne({ patientId: new Types.ObjectId(patientId), isCurrent: true }, { 'items.exerciseId': 1 })
+      .lean();
+    return (plan?.items ?? []).map((item) => item.exerciseId);
+  }
+
+  /** Read inside a plan save's transaction, to check each planned exercise. */
+  async findForPlan(ids: Types.ObjectId[], session: ClientSession): Promise<Map<string, ExerciseDocument>> {
+    if (!ids.length) return new Map();
+    const rows = await this.model.find({ _id: { $in: ids } }).session(session).exec();
+    return new Map(rows.map((row) => [String(row._id), row]));
+  }
+
+  /** Library details for the exercises in a plan, live, so a new video reaches patients at once. */
+  async responsesByIds(ids: Types.ObjectId[]): Promise<Map<string, ExerciseResponse>> {
+    if (!ids.length) return new Map();
+    const rows = await this.model.find({ _id: { $in: ids } }).exec();
+    const responses = await this.respondMany(rows);
+    return new Map(responses.map((response) => [response.id, response]));
   }
 
   private toChanges(dto: UpdateExerciseDto): ExerciseChanges {
