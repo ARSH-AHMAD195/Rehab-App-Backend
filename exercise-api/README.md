@@ -17,7 +17,11 @@ writes it.
 - Today's checklist: the patient ticks exercises off (safe to retry, can't over-count),
   can undo a tick the same day, and sees their history; the doctor sees any day and the history
 
-Compliance counts come next (reference, section 10).
+- Compliance for doctors: planned against done, per day and per exercise (the percentage
+  waits for the client's formula)
+
+Still to do: a journey test with the Auth and Health Monitoring APIs, and checking that video
+links actually play (reference, sections 9 and 10).
 
 ## Run it
 

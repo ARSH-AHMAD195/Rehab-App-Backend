@@ -5,6 +5,7 @@ import { PlansModule } from '../plans/plans.module';
 import { IdempotencyModule } from '../idempotency/idempotency.module';
 import { ExerciseCompletion, ExerciseCompletionSchema } from './completion.schema';
 import { CompletionsService } from './completions.service';
+import { ComplianceService } from './compliance.service';
 import { CompletionsController, PatientCompletionsController } from './completions.controller';
 
 @Module({
@@ -15,7 +16,7 @@ import { CompletionsController, PatientCompletionsController } from './completio
     IdempotencyModule,
   ],
   controllers: [CompletionsController, PatientCompletionsController],
-  providers: [CompletionsService],
+  providers: [CompletionsService, ComplianceService],
   exports: [CompletionsService],
 })
 export class CompletionsModule {}

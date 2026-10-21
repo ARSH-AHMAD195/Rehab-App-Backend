@@ -20,6 +20,8 @@ import { PatientAccessGuard } from '../common/guards/patient-access.guard';
 import { IdempotencyService } from '../idempotency/idempotency.service';
 import { AuthUser } from '../users/users.service';
 import { CompletionsService } from './completions.service';
+import { ComplianceService } from './compliance.service';
+import { ComplianceQueryDto, ComplianceResponse } from './compliance.dto';
 import {
   ChecklistQueryDto,
   ChecklistResponse,
@@ -84,7 +86,10 @@ export class CompletionsController {
 @ApiForbiddenResponse({ description: 'FORBIDDEN_ROLE' })
 @Controller('patients')
 export class PatientCompletionsController {
-  constructor(private readonly completions: CompletionsService) {}
+  constructor(
+    private readonly completions: CompletionsService,
+    private readonly compliance: ComplianceService,
+  ) {}
 
   // The "me" routes come first, so "me" is never read as a patient id.
   @Get('me/exercise-checklist')
@@ -115,6 +120,26 @@ export class PatientCompletionsController {
     @Query() query: ChecklistQueryDto,
   ): Promise<ChecklistResponse> {
     return this.completions.checklistForDoctor(patientId, query.date, doctor);
+  }
+
+  @Get(':patientId/exercise-compliance')
+  @Roles(ROLES.DOCTOR)
+  @UseGuards(PatientAccessGuard)
+  @ApiOperation({
+    summary: 'How well a linked patient kept to the plan, as counts (doctor)',
+    description:
+      'Planned and done, per day and per exercise. Each day is counted against the plan in place that day. ' +
+      'percentage is null until the client agrees the formula. Last 7 days by default, at most 90.',
+  })
+  @ApiOkResponse({ type: ComplianceResponse })
+  @ApiBadRequestResponse({ description: 'VALIDATION_FAILED - e.g. `to` after today, or more than 90 days' })
+  @ApiNotFoundResponse({ description: 'NOT_FOUND - no such patient, or not linked to you' })
+  complianceForPatient(
+    @CurrentUser() doctor: AuthUser,
+    @Param('patientId') patientId: string,
+    @Query() query: ComplianceQueryDto,
+  ): Promise<ComplianceResponse> {
+    return this.compliance.forDoctor(patientId, query, doctor);
   }
 
   @Get(':patientId/exercise-completions')

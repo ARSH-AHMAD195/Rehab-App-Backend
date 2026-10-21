@@ -88,6 +88,10 @@ export const COMPLETION_LIMITS = {
 /** Completion history defaults to the last 30 days, like Health Monitoring's logs. */
 export const DEFAULT_HISTORY_DAYS = 30;
 
+/** Compliance covers the last 7 days by default, and at most 90 days in one request. */
+export const DEFAULT_COMPLIANCE_DAYS = 7;
+export const MAX_COMPLIANCE_DAYS = 90;
+
 /** Checklist item status. */
 export const CHECKLIST_STATUS = {
   NOT_YET: 'NOT_YET',

@@ -284,12 +284,19 @@ unknown, someone else's or already-undone tick gives `404`.
   "done": 28,
   "percentage": null,
   "byDay": [ { "date": "2026-10-20", "planned": 5, "done": 4 } ],
-  "byExercise": [ { "itemId": "a1", "name": "Seated knee extension", "planned": 7, "done": 7 } ]
+  "byExercise": [ { "itemId": "…", "exerciseId": "…", "name": "Seated knee extension", "planned": 7, "done": 7 } ]
 }
 ```
 
-`planned` and `done` are counts. `percentage` stays `null` until the client agrees the
-formula. ⏳ *Compliance formula*
+- `planned` and `done` are counts. `percentage` stays `null` until the client agrees the
+  formula. ⏳ *Compliance formula*
+- Each day is counted against the plan in place when that day ended, the same rule as the
+  checklist, so the two always agree. Days before the first plan count as nothing planned.
+- A tick counts at most `timesPerDay` times per item per day; undone ticks don't count.
+- `from`/`to` default to the last 7 days ending today. `to` can't be after the patient's
+  today, and the range is at most 90 days (`OUT_OF_RANGE`). Today is included even though
+  it isn't over yet.
+- Audited as `EXERCISE_PLAN_VIEWED`.
 
 ---
 
@@ -354,7 +361,7 @@ These are in the SRS but belong to other modules. This API provides the data the
 | **Videos** | The SRS says *private* YouTube videos. Private videos only play for invited Google accounts, so they won't play for patients in the app; *Unlisted* plays for anyone with the link. Will the clinic upload its own videos as Unlisted, or use other channels' videos? | Store the YouTube id; the app plays it. No check yet that the video plays |
 | **Plan structure** | How is a plan described: days of the week, times per day, sets, reps, minutes? Do plans have start and end dates or phases? | Days of week + times per day; optional sets / reps / minutes; no dates |
 | **What the patient records** | Just "done", or also minutes, difficulty or pain? | Just "done"; `details` accepted but optional |
-| **Compliance formula** | How is the compliance percentage worked out? | Counts only; percentage `null` |
+| **Compliance formula** | How is the compliance percentage worked out? Does today (not over yet) count? Do some exercises count more than others? | Counts only; percentage `null` |
 | **Extra completions** | Can a patient do an exercise more often than planned, or on a day it isn't planned? | Refused beyond the planned number; only planned days |
 | **Edit and undo** | Can a patient undo a tick? Fill in a past day? | Undo same day only; no past days |
 | **Deletion policy** | Can exercises or categories be deleted for good? | Deactivate only |
@@ -368,5 +375,5 @@ These are in the SRS but belong to other modules. This API provides the data the
 2. Plans (doctor assigns; patient and doctor view), and the patient's plan-only view of
    `/exercises` — **done**
 3. Today's checklist, completions and history — **done**
-4. Compliance counts
+4. Compliance counts — **done**
 5. A journey test with Auth and Health Monitoring, on one database

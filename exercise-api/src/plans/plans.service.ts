@@ -188,6 +188,14 @@ export class PlansService {
       .exec();
   }
 
+  /** Every version saved before `before`, oldest first: what compliance walks through day by day. */
+  versionsBefore(patientId: string, before: Date): Promise<ExercisePlanDocument[]> {
+    return this.model
+      .find({ patientId: new Types.ObjectId(patientId), createdAt: { $lt: before } })
+      .sort({ version: 1 })
+      .exec();
+  }
+
   /** The plan's items with each exercise's library details, live. */
   async itemsWithExercises(plan: ExercisePlanDocument): Promise<PlanItemResponse[]> {
     const exercises = await this.exercises.responsesByIds(plan.items.map((item) => item.exerciseId));
