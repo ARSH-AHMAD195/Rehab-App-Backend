@@ -51,6 +51,50 @@ export class NotFoundException extends ApiException {
   }
 }
 
+export class DayChangedException extends ApiException {
+  constructor(message: string) {
+    super(HttpStatus.CONFLICT, ERROR_CODES.DAY_CHANGED, message);
+  }
+}
+
+export class ExerciseNotInPlanException extends ApiException {
+  constructor(message = "This exercise isn't in your current plan. Reload today's checklist.") {
+    super(HttpStatus.CONFLICT, ERROR_CODES.EXERCISE_NOT_IN_PLAN, message);
+  }
+}
+
+export class ExerciseAlreadyDoneException extends ApiException {
+  constructor(timesPerDay: number) {
+    super(
+      HttpStatus.CONFLICT,
+      ERROR_CODES.EXERCISE_ALREADY_DONE,
+      `Already done ${timesPerDay} time${timesPerDay === 1 ? '' : 's'} today, as planned.`,
+    );
+  }
+}
+
+/** An earlier request with this Idempotency-Key hasn't finished; retry shortly to get its answer. */
+export class IdempotencyKeyInUseException extends ApiException {
+  constructor() {
+    super(
+      HttpStatus.CONFLICT,
+      ERROR_CODES.IDEMPOTENCY_KEY_IN_USE,
+      'A request with this Idempotency-Key is still being processed. Retry in a moment.',
+    );
+  }
+}
+
+/** The Idempotency-Key was already used for a different request body - a client bug. */
+export class IdempotencyKeyReusedException extends ApiException {
+  constructor() {
+    super(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      ERROR_CODES.IDEMPOTENCY_KEY_REUSED,
+      'This Idempotency-Key was already used with a different request body. Use a new key for a new request.',
+    );
+  }
+}
+
 /** A concurrent write won the race, so nothing was saved and the same request can be sent again. */
 export class ConcurrentUpdateException extends ApiException {
   constructor(message = 'The record changed while saving. Retry the request.') {

@@ -60,7 +60,8 @@ extra code.
 | `exerciseCategories` | The categories. Starts with the 4 from the SRS | Admin |
 | `exercises` | The library: name, category, instructions, video | Admin |
 | `exercisePlans` | Each patient's plan. One current version; older versions kept | Doctor |
-| `exerciseCompletions` | One record per "done" tick | Patient |
+| `exerciseCompletions` | One record per "done" tick. An undo marks it inactive; it's kept | Patient |
+| `exerciseIdempotencyKeys` | Idempotency-Keys for ticks, kept 24 hours. Its own collection, so a key used for a vitals save never returns that save's answer here | This API |
 | `auditLogs` | Shared with the other APIs | This API |
 | `exerciseOutboxEvents` | Events waiting to be sent. Same pattern as Health Monitoring's `outboxEvents`, but its own collection: each API's sender picks up everything in its collection, so sharing one would make each API send the other's events | This API |
 
@@ -137,18 +138,18 @@ Seeded: `WALKING`, `STRENGTH`, `BREATHING`, `STRETCHING` (the four named in the 
 ```json
 {
   "id": "…",
-  "patientId": "…",
-  "itemId": "a1",
-  "exerciseId": "…",
+  "itemId": "…",
+  "exercise": { "id": "…", "name": "Seated knee extension", "category": "STRENGTH" },
   "planVersion": 3,
   "date": "2026-10-20",
   "completedAt": "2026-10-20T08:15:00+05:30",
-  "details": null
+  "details": { "durationMin": 10, "note": "Felt fine" }
 }
 ```
 
 - `date` is the patient's local date, in their profile time zone (same rule as Health Monitoring).
-- `details` is optional. ⏳ *What the patient records*
+- `details` is optional: `durationMin` (1–240) and `note` (up to 500 characters), or `null`.
+  ⏳ *What the patient records*
 
 ---
 
@@ -212,36 +213,62 @@ The SRS asks for a *Daily Exercise Checklist*; the route list doesn't have one.
 ```json
 {
   "date": "2026-10-20",
-  "items": [ { "itemId": "a1", "exercise": { … }, "timesPerDay": 1, "doneCount": 1, "status": "DONE" } ],
+  "planVersion": 3,
+  "items": [
+    {
+      "itemId": "…",
+      "exercise": { … },
+      "timesPerDay": 2,
+      "doneCount": 1,
+      "status": "PARTLY_DONE",
+      "completions": [ { "id": "…", "completedAt": "2026-10-20T08:15:00+05:30" } ],
+      "target": { "sets": 2, "reps": 10, "durationMin": null },
+      "notes": null
+    }
+  ],
   "doneCount": 3,
   "plannedCount": 5
 }
 ```
 
-`status` is `NOT_YET`, `PARTLY_DONE` or `DONE`.
+- Only items planned for that day of the week are listed.
+- `status` is `NOT_YET`, `PARTLY_DONE` or `DONE`. `completions` are that day's ticks; their
+  ids are what undo takes.
+- `plannedCount` adds up `timesPerDay`; `doneCount` counts ticks, at most `timesPerDay` per
+  item (so lowering `timesPerDay` mid-day never shows more than 100%).
+- A past day uses **the plan in place when that day ended**, so history still shows what was
+  planned then. A doctor's `date` can't be after the patient's today (`OUT_OF_RANGE`).
+- With no plan for that day: `planVersion: 0` and no items.
 
 ### Completions and history
 
 | Method | Path | Who | What it does |
 |---|---|---|---|
-| POST | `/exercise-completions` | Patient | Record "I did this one" |
-| DELETE | `/exercise-completions/:completionId` | Patient | Undo a tick, same day only ⏳ *Edit and undo policy* |
-| GET | `/patients/me/exercise-completions` | Patient | My history (`from`, `to`, paged) |
-| GET | `/patients/:patientId/exercise-completions` | Linked doctor | A patient's history |
+| POST | `/exercise-completions` | Patient | Record "I did this one" → `201` with the completion |
+| DELETE | `/exercise-completions/:completionId` | Patient | Undo one of today's ticks → `204` ⏳ *Edit and undo policy* |
+| GET | `/patients/me/exercise-completions` | Patient | My ticks, newest first (`from`, `to` default to the last 30 days; paged) |
+| GET | `/patients/:patientId/exercise-completions` | Linked doctor | A patient's ticks, the same way |
 
 **POST body**
 
 ```json
-{ "itemId": "a1", "date": "2026-10-20", "details": null }
+{ "itemId": "…", "date": "2026-10-20", "details": null }
 ```
 
 Checks, in order:
 1. `itemId` is in the patient's **current** plan → otherwise `409 EXERCISE_NOT_IN_PLAN`.
 2. `date` is the patient's today → otherwise `409 DAY_CHANGED` (same as Health Monitoring).
-3. Not already done `timesPerDay` times today → otherwise `409 EXERCISE_ALREADY_DONE`.
+3. The item is planned for today's day of the week → otherwise `409 EXERCISE_NOT_IN_PLAN`.
+4. Not already done `timesPerDay` times today → otherwise `409 EXERCISE_ALREADY_DONE`.
    ⏳ *Extra completions*
 
-Supports `Idempotency-Key`, so a retry after a timeout never counts twice.
+Several taps at once can't over-count: each planned time can be filled once, enforced by the
+database. Supports `Idempotency-Key` exactly like Health Monitoring's save, so a retry after a
+timeout never counts twice.
+
+**Undo:** only the patient's own, only today's (an earlier day gives `409 DAY_CHANGED`). The
+tick is kept, marked inactive, and no longer counts; the exercise can be ticked again. An
+unknown, someone else's or already-undone tick gives `404`.
 
 ### Compliance
 
@@ -272,8 +299,10 @@ Same format and codes as Health Monitoring, plus:
 
 | Status | `code` | When |
 |---|---|---|
-| 409 | `EXERCISE_NOT_IN_PLAN` | A completion for an exercise that isn't in the patient's current plan |
+| 409 | `EXERCISE_NOT_IN_PLAN` | A completion for an item that isn't in the patient's current plan, or isn't planned for today |
 | 409 | `EXERCISE_ALREADY_DONE` | Already done the planned number of times today |
+| 409 | `DAY_CHANGED` | A completion whose `date` isn't the patient's today, or undoing an earlier day's tick |
+| 409 / 422 | `IDEMPOTENCY_KEY_IN_USE` / `IDEMPOTENCY_KEY_REUSED` | Same as Health Monitoring |
 | 400 | `VALIDATION_FAILED` with `details[].code = NOT_ALLOWED` | Using a deactivated exercise or category, or deactivating a category that's in use |
 | 400 | `VALIDATION_FAILED` with `details[].code = UNKNOWN_ID` | An id that points at nothing, e.g. an unknown `categoryId` |
 | 400 | `VALIDATION_FAILED` with `details[].code = ALREADY_EXISTS` | A category code that's already taken |
@@ -287,6 +316,8 @@ Same format and codes as Health Monitoring, plus:
 | `EXERCISE_PLAN_CHANGED` | A doctor assigns or changes a plan (old and new plan recorded) |
 | `EXERCISE_PLAN_VIEWED` | A doctor views a patient's plan, checklist, history or compliance |
 | `EXERCISE_LIBRARY_CHANGED` | An admin adds, changes or deactivates an exercise or category |
+| `EXERCISE_COMPLETION_RECORDED` | A patient ticks an exercise off *(added: patient data changes are audited, as in Health Monitoring)* |
+| `EXERCISE_COMPLETION_UNDONE` | A patient undoes a tick *(added)* |
 
 ---
 
@@ -299,6 +330,7 @@ analytics modules to use later:
 |---|---|
 | `exercise.plan.assigned` | A plan is assigned or changed. Lets the patient be told |
 | `exercise.completed` | A patient ticks an exercise off. Feeds the patient timeline |
+| `exercise.completion.undone` | A patient undoes a tick, so the timeline can take it back *(added)* |
 
 Delivery has the same open item as Health Monitoring: where events go is not decided yet.
 
@@ -335,6 +367,6 @@ These are in the SRS but belong to other modules. This API provides the data the
 1. Project setup, categories and the library (admin) — **done**
 2. Plans (doctor assigns; patient and doctor view), and the patient's plan-only view of
    `/exercises` — **done**
-3. Today's checklist, completions and history
+3. Today's checklist, completions and history — **done**
 4. Compliance counts
 5. A journey test with Auth and Health Monitoring, on one database

@@ -96,7 +96,16 @@ export async function createTestApp(): Promise<TestContext> {
       return { ...user, id: id.toString() };
     },
     async reset() {
-      for (const name of ['users', 'exerciseCategories', 'exercises', 'exercisePlans', 'auditLogs', 'exerciseOutboxEvents']) {
+      for (const name of [
+        'users',
+        'exerciseCategories',
+        'exercises',
+        'exercisePlans',
+        'exerciseCompletions',
+        'exerciseIdempotencyKeys',
+        'auditLogs',
+        'exerciseOutboxEvents',
+      ]) {
         await connection.collection(name).deleteMany({});
       }
       await app.get(CategoriesService).seedMissing();

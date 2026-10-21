@@ -16,6 +16,7 @@ import { UsersModule } from './users/users.module';
 import { CategoriesModule } from './categories/categories.module';
 import { ExercisesModule } from './exercises/exercises.module';
 import { PlansModule } from './plans/plans.module';
+import { CompletionsModule } from './completions/completions.module';
 import { OutboxModule } from './outbox/outbox.module';
 import { TimeModule } from './time/time.module';
 
@@ -45,6 +46,7 @@ import { TimeModule } from './time/time.module';
     CategoriesModule,
     ExercisesModule,
     PlansModule,
+    CompletionsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

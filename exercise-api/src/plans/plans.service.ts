@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { ClientSession, Model, Types } from 'mongoose';
 import { AUDIT_ACTIONS, DEFAULT_PAGE_LIMIT, DETAIL_CODES, EVENT_TYPES } from '../common/constants';
 import {
   ConcurrentUpdateException,
@@ -18,6 +18,7 @@ import { ExercisesService } from '../exercises/exercises.service';
 import { ExercisePlan, ExercisePlanDocument, PlanItem } from './plan.schema';
 import {
   PlanItemDto,
+  PlanItemResponse,
   PlanResponse,
   PlanVersionListResponse,
   PlanVersionsQueryDto,
@@ -164,8 +165,52 @@ export class PlansService {
     };
   }
 
-  private current(patientId: string): Promise<ExercisePlanDocument | null> {
-    return this.model.findOne({ patientId: new Types.ObjectId(patientId), isCurrent: true }).exec();
+  /** Pass the session to read it inside a transaction, e.g. while recording a completion. */
+  current(patientId: string, session?: ClientSession): Promise<ExercisePlanDocument | null> {
+    return this.model
+      .findOne({ patientId: new Types.ObjectId(patientId), isCurrent: true })
+      .session(session ?? null)
+      .exec();
+  }
+
+  /**
+   * The plan that applied on a day: the version in place when that day ended
+   * in the patient's time zone. For today that's the current plan, so a
+   * change the doctor makes this morning shows on this morning's checklist.
+   */
+  planOn(patientId: string, date: string, timeZone: string): Promise<ExercisePlanDocument | null> {
+    return this.model
+      .findOne({
+        patientId: new Types.ObjectId(patientId),
+        createdAt: { $lt: this.day.startOfDay(this.day.shift(date, 1), timeZone) },
+      })
+      .sort({ version: -1 })
+      .exec();
+  }
+
+  /** The plan's items with each exercise's library details, live. */
+  async itemsWithExercises(plan: ExercisePlanDocument): Promise<PlanItemResponse[]> {
+    const exercises = await this.exercises.responsesByIds(plan.items.map((item) => item.exerciseId));
+    return plan.items.map((item) => {
+      const stored = toStoredItem(item);
+      const exercise = exercises.get(stored.exerciseId);
+      if (!exercise) throw new NotFoundException(`Exercise ${stored.exerciseId} in the plan no longer exists`);
+      return {
+        itemId: stored.itemId,
+        exercise: {
+          id: exercise.id,
+          name: exercise.name,
+          category: exercise.category,
+          description: exercise.description,
+          instructions: exercise.instructions,
+          video: exercise.video,
+          active: exercise.active,
+        },
+        schedule: stored.schedule,
+        target: stored.target,
+        notes: stored.notes,
+      };
+    });
   }
 
   /** One exercise once per plan: how often is `timesPerDay`, and completions need one item per exercise. */
@@ -222,31 +267,11 @@ export class PlansService {
   private async respond(patientId: string, plan: ExercisePlanDocument | null, timeZone?: string): Promise<PlanResponse> {
     if (!plan) return { patientId, version: 0, items: [], assignedBy: null, updatedAt: null };
 
-    const exercises = await this.exercises.responsesByIds(plan.items.map((item) => item.exerciseId));
     const zone = timeZone ?? (await this.zoneOf(patientId));
     return {
       patientId,
       version: plan.version,
-      items: plan.items.map((item) => {
-        const stored = toStoredItem(item);
-        const exercise = exercises.get(stored.exerciseId);
-        if (!exercise) throw new NotFoundException(`Exercise ${stored.exerciseId} in the plan no longer exists`);
-        return {
-          itemId: stored.itemId,
-          exercise: {
-            id: exercise.id,
-            name: exercise.name,
-            category: exercise.category,
-            description: exercise.description,
-            instructions: exercise.instructions,
-            video: exercise.video,
-            active: exercise.active,
-          },
-          schedule: stored.schedule,
-          target: stored.target,
-          notes: stored.notes,
-        };
-      }),
+      items: await this.itemsWithExercises(plan),
       assignedBy: { id: String(plan.assignedById), name: plan.assignedByName },
       updatedAt: this.day.toLocalIso(plan.createdAt, zone),
     };

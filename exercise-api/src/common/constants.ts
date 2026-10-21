@@ -12,6 +12,15 @@ export const ERROR_CODES = {
   NOT_FOUND: 'NOT_FOUND',
   /** The record changed under a concurrent write; the same request can be retried. */
   CONCURRENT_UPDATE: 'CONCURRENT_UPDATE',
+  /** The date sent is no longer the patient's today (midnight passed). Same as Health Monitoring. */
+  DAY_CHANGED: 'DAY_CHANGED',
+  /** A completion for an item that isn't in the current plan, or isn't planned for today. */
+  EXERCISE_NOT_IN_PLAN: 'EXERCISE_NOT_IN_PLAN',
+  /** Already done the planned number of times today. */
+  EXERCISE_ALREADY_DONE: 'EXERCISE_ALREADY_DONE',
+  /** Idempotency-Key, same as Health Monitoring: still being processed (409) or reused for another body (422). */
+  IDEMPOTENCY_KEY_IN_USE: 'IDEMPOTENCY_KEY_IN_USE',
+  IDEMPOTENCY_KEY_REUSED: 'IDEMPOTENCY_KEY_REUSED',
   RATE_LIMITED: 'RATE_LIMITED',
   INTERNAL: 'INTERNAL',
 } as const;
@@ -40,6 +49,9 @@ export const AUDIT_ACTIONS = {
   EXERCISE_PLAN_CHANGED: 'EXERCISE_PLAN_CHANGED',
   EXERCISE_PLAN_VIEWED: 'EXERCISE_PLAN_VIEWED',
   EXERCISE_LIBRARY_CHANGED: 'EXERCISE_LIBRARY_CHANGED',
+  /** A patient ticks an exercise off, or undoes a tick. Changes to patient data, as in Health Monitoring. */
+  EXERCISE_COMPLETION_RECORDED: 'EXERCISE_COMPLETION_RECORDED',
+  EXERCISE_COMPLETION_UNDONE: 'EXERCISE_COMPLETION_UNDONE',
 } as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
 
@@ -50,6 +62,8 @@ export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
 export const EVENT_TYPES = {
   PLAN_ASSIGNED: 'exercise.plan.assigned',
   COMPLETED: 'exercise.completed',
+  /** So the timeline can take back an exercise.completed it already showed. */
+  COMPLETION_UNDONE: 'exercise.completion.undone',
 } as const;
 export type EventType = (typeof EVENT_TYPES)[keyof typeof EVENT_TYPES];
 
@@ -64,6 +78,23 @@ export const PLAN_LIMITS = {
   DURATION_MIN: 240,
   NOTES: 500,
 } as const;
+
+/** ⏳ What the patient records is waiting for the client; these optional details are the default. */
+export const COMPLETION_LIMITS = {
+  DURATION_MIN: 240,
+  NOTE: 500,
+} as const;
+
+/** Completion history defaults to the last 30 days, like Health Monitoring's logs. */
+export const DEFAULT_HISTORY_DAYS = 30;
+
+/** Checklist item status. */
+export const CHECKLIST_STATUS = {
+  NOT_YET: 'NOT_YET',
+  PARTLY_DONE: 'PARTLY_DONE',
+  DONE: 'DONE',
+} as const;
+export type ChecklistStatus = (typeof CHECKLIST_STATUS)[keyof typeof CHECKLIST_STATUS];
 
 /** The four categories named in the SRS, created on first start. */
 export const DEFAULT_CATEGORIES = [

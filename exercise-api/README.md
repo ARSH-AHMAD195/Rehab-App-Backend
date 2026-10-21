@@ -14,7 +14,10 @@ writes it.
 - Plans: a doctor assigns a plan to a linked patient; every change is kept as a version; the
   patient sees their plan and only the exercises in it
 
-The checklist, completions and compliance come next (reference, section 10).
+- Today's checklist: the patient ticks exercises off (safe to retry, can't over-count),
+  can undo a tick the same day, and sees their history; the doctor sees any day and the history
+
+Compliance counts come next (reference, section 10).
 
 ## Run it
 
