@@ -1,0 +1,85 @@
+# Render Blueprint: the three APIs as three web services, all using one
+# MongoDB Atlas database. In Render: New > Blueprint > pick this repo.
+#
+# Values marked `sync: false` are secrets: Render asks for them once when the
+# Blueprint is created and never reads them from this file. The same database
+# and Firebase values go into all three services.
+#
+# The free plan sleeps after 15 minutes with no requests; the next request then
+# takes up to a minute. Fine for a demo, not for real patients.
+
+services:
+  - type: web
+    name: ffs-auth-api
+    runtime: node
+    rootDir: auth-api
+    region: singapore
+    plan: free
+    # The build needs devDependencies (the Nest CLI and TypeScript).
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm run start:prod
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: SWAGGER_ENABLED
+        value: "false"
+      - key: MONGODB_URI
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: FIREBASE_WEB_API_KEY
+        sync: false
+
+  - type: web
+    name: ffs-health-monitoring-api
+    runtime: node
+    rootDir: health-monitoring-api
+    region: singapore
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm run start:prod
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: SWAGGER_ENABLED
+        value: "false"
+      - key: DEFAULT_TIME_ZONE
+        value: Asia/Kolkata
+      - key: MONGODB_URI
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
+
+  - type: web
+    name: ffs-exercise-api
+    runtime: node
+    rootDir: exercise-api
+    region: singapore
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm run start:prod
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: SWAGGER_ENABLED
+        value: "false"
+      - key: DEFAULT_TIME_ZONE
+        value: Asia/Kolkata
+      - key: MONGODB_URI
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false
