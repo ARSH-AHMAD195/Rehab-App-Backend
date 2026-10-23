@@ -93,8 +93,15 @@ Seeded: `WALKING`, `STRENGTH`, `BREATHING`, `STRETCHING` (the four named in the 
 - `video` is optional (`null` until the client supplies the link). The admin sends
   `videoUrl`: any YouTube watch, share (youtu.be), embed or shorts link, or a bare video id
   (`null` removes the video). We store only the provider and id; the app plays it. Anything
-  that isn't a YouTube video link is refused with `WRONG_SHAPE`. Checking that the video
-  actually plays (exists, Unlisted or Public, embedding allowed) isn't built yet. ⏳ *Videos*
+  that isn't a YouTube video link is refused with `WRONG_SHAPE`.
+- The clinic uploads its videos to YouTube as **Unlisted** (confirmed by the client). When an
+  admin saves a link, the API asks YouTube (Data API v3, `YOUTUBE_API_KEY`) whether it will
+  play in the app, and refuses it with `VIDEO_NOT_PLAYABLE` if the video doesn't exist, is
+  **Private**, is still processing, or has embedding turned off; `issue` tells the admin what
+  to change in YouTube Studio. Public videos play too, so they're accepted. The check runs on
+  every save that sends a `videoUrl`, even an unchanged one; an edit that leaves `videoUrl`
+  out doesn't ask YouTube. If YouTube can't be reached, nothing is saved and the answer is
+  `503 VIDEO_CHECK_UNAVAILABLE`, safe to retry.
 - Deleting an exercise **deactivates** it (`active: false`), so history and old plans never
   break. ⏳ *Deletion policy*
 
@@ -314,6 +321,8 @@ Same format and codes as Health Monitoring, plus:
 | 400 | `VALIDATION_FAILED` with `details[].code = NOT_ALLOWED` | Using a deactivated exercise or category, or deactivating a category that's in use |
 | 400 | `VALIDATION_FAILED` with `details[].code = UNKNOWN_ID` | An id that points at nothing, e.g. an unknown `categoryId` |
 | 400 | `VALIDATION_FAILED` with `details[].code = ALREADY_EXISTS` | A category code that's already taken |
+| 400 | `VALIDATION_FAILED` with `details[].code = VIDEO_NOT_PLAYABLE` | A YouTube video that won't play in the app: missing, Private, still processing or embedding off |
+| 503 | `VIDEO_CHECK_UNAVAILABLE` | YouTube couldn't be asked about the video; nothing was saved, retry |
 
 ---
 
@@ -359,7 +368,6 @@ These are in the SRS but belong to other modules. This API provides the data the
 
 | Topic | Question | Default until answered |
 |---|---|---|
-| **Videos** | The SRS says *private* YouTube videos. Private videos only play for invited Google accounts, so they won't play for patients in the app; *Unlisted* plays for anyone with the link. Will the clinic upload its own videos as Unlisted, or use other channels' videos? | Store the YouTube id; the app plays it. No check yet that the video plays |
 | **Plan structure** | How is a plan described: days of the week, times per day, sets, reps, minutes? Do plans have start and end dates or phases? | Days of week + times per day; optional sets / reps / minutes; no dates |
 | **What the patient records** | Just "done", or also minutes, difficulty or pain? | Just "done"; `details` accepted but optional |
 | **Compliance formula** | How is the compliance percentage worked out? Does today (not over yet) count? Do some exercises count more than others? | Counts only; percentage `null` |
@@ -377,4 +385,7 @@ These are in the SRS but belong to other modules. This API provides the data the
    `/exercises` — **done**
 3. Today's checklist, completions and history — **done**
 4. Compliance counts — **done**
-5. A journey test with Auth and Health Monitoring, on one database
+5. A journey test with Auth and Health Monitoring, on one database — **done**
+   (`integration-tests/`)
+6. Checking with YouTube that each video plays for patients (Unlisted, as the client
+   confirmed) — **done**

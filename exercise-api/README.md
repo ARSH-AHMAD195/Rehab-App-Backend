@@ -10,7 +10,8 @@ writes it.
 ## Built so far
 
 - Exercise categories (the four from the SRS are added on first start)
-- The exercise library, with a YouTube link per exercise
+- The exercise library, with a YouTube link per exercise. The clinic's videos are Unlisted;
+  when an admin saves a link, YouTube is asked whether it will play in the app
 - Plans: a doctor assigns a plan to a linked patient; every change is kept as a version; the
   patient sees their plan and only the exercises in it
 
@@ -20,13 +21,14 @@ writes it.
 - Compliance for doctors: planned against done, per day and per exercise (the percentage
   waits for the client's formula)
 
-Still to do: a journey test with the Auth and Health Monitoring APIs, and checking that video
-links actually play (reference, sections 9 and 10).
+A journey test that runs this API with Auth and Health Monitoring on one database is in
+`integration-tests/` at the top of the repo. Still waiting on the client: reference, section 9.
 
 ## Run it
 
 1. Start MongoDB with `docker compose up -d` in `health-monitoring-api/` (all three APIs share it).
-2. `cp .env.example .env` and fill in the Firebase service account (same as the other APIs).
+2. `cp .env.example .env` and fill in the Firebase service account (same as the other APIs)
+   and `YOUTUBE_API_KEY` (a Google Cloud API key with the YouTube Data API v3 enabled).
 3. `npm install`
 4. `npm run start:dev` → http://localhost:3002/api/v1
 

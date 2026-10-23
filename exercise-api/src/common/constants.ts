@@ -24,6 +24,8 @@ export const ERROR_CODES = {
   RATE_LIMITED: 'RATE_LIMITED',
   /** The request body is over MAX_BODY_SIZE. */
   PAYLOAD_TOO_LARGE: 'PAYLOAD_TOO_LARGE',
+  /** YouTube couldn't be asked whether a video plays; nothing was saved and the same request can be retried. */
+  VIDEO_CHECK_UNAVAILABLE: 'VIDEO_CHECK_UNAVAILABLE',
   INTERNAL: 'INTERNAL',
 } as const;
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -40,6 +42,8 @@ export const DETAIL_CODES = {
   ALREADY_EXISTS: 'ALREADY_EXISTS',
   /** Using a deactivated record, or deactivating a category that's in use. */
   NOT_ALLOWED: 'NOT_ALLOWED',
+  /** A YouTube video that won't play in the app: missing, Private, still processing or not embeddable. */
+  VIDEO_NOT_PLAYABLE: 'VIDEO_NOT_PLAYABLE',
 } as const;
 export type DetailCode = (typeof DETAIL_CODES)[keyof typeof DETAIL_CODES];
 

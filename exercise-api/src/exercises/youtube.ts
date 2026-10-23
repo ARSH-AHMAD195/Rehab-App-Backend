@@ -20,8 +20,7 @@ const ID_PATHS = new Set(['embed', 'shorts', 'live', 'v', 'e']);
  * including links to playlists, channels or other sites.
  *
  * This only reads the link. Whether the video exists, is Unlisted/Public and
- * allows embedding is a separate check (not built yet - see the reference,
- * section 9, Videos).
+ * allows embedding is asked of YouTube separately (youtube-video-checker.ts).
  */
 export function parseYouTubeVideoId(input: string): string | null {
   const value = input.trim();

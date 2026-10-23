@@ -5,6 +5,8 @@ import { ExercisePlan, ExercisePlanSchema } from '../plans/plan.schema';
 import { Exercise, ExerciseSchema } from './exercise.schema';
 import { ExercisesService } from './exercises.service';
 import { ExercisesController } from './exercises.controller';
+import { VIDEO_CHECKER } from './video-checker';
+import { YouTubeVideoChecker } from './youtube-video-checker';
 
 @Module({
   imports: [
@@ -16,7 +18,8 @@ import { ExercisesController } from './exercises.controller';
     CategoriesModule,
   ],
   controllers: [ExercisesController],
-  providers: [ExercisesService],
-  exports: [ExercisesService],
+  // Tests override VIDEO_CHECKER, as they do the token verifier.
+  providers: [ExercisesService, YouTubeVideoChecker, { provide: VIDEO_CHECKER, useExisting: YouTubeVideoChecker }],
+  exports: [ExercisesService, YouTubeVideoChecker],
 })
 export class ExercisesModule {}

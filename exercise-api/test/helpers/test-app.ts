@@ -10,11 +10,15 @@ import { validationExceptionFactory } from '../../src/common/validation-exceptio
 import { TOKEN_VERIFIER, TokenVerifier } from '../../src/auth/token-verifier';
 import { UnauthenticatedException } from '../../src/common/api.exception';
 import { CategoriesService } from '../../src/categories/categories.service';
+import { VIDEO_CHECKER, VideoChecker, VideoProblem } from '../../src/exercises/video-checker';
+import { VideoCheckUnavailableException } from '../../src/common/api.exception';
 
 /**
- * Boots the real AppModule with two things swapped out, as in Health Monitoring:
+ * Boots the real AppModule with three things swapped out:
  *
  *  - the Firebase verifier. The bearer token in tests IS the firebaseUid.
+ *  - the YouTube video check. Every video plays unless a test says otherwise
+ *    through `videos`.
  *  - the database, pointed at a throwaway replica set.
  *
  * Everything else - guards, filter, transactions, audit - is the production
@@ -33,6 +37,8 @@ export interface TestUser {
 export interface TestContext {
   app: INestApplication;
   connection: Connection;
+  /** What the YouTube check says about each video id. Emptied by reset(). */
+  videos: FakeVideoChecker;
   /** Bearer value for a seeded user. */
   token(user: TestUser): string;
   createUser(user: Omit<TestUser, 'id'>): Promise<TestUser>;
@@ -49,8 +55,28 @@ class StubTokenVerifier implements TokenVerifier {
   }
 }
 
+/** Stands in for YouTube: a video plays unless given a problem, or YouTube is "down". */
+export class FakeVideoChecker implements VideoChecker {
+  readonly problems = new Map<string, VideoProblem>();
+  down = false;
+  readonly asked: string[] = [];
+
+  async check(videoId: string): Promise<VideoProblem | null> {
+    this.asked.push(videoId);
+    if (this.down) throw new VideoCheckUnavailableException();
+    return this.problems.get(videoId) ?? null;
+  }
+
+  clear(): void {
+    this.problems.clear();
+    this.down = false;
+    this.asked.length = 0;
+  }
+}
+
 export async function createTestApp(): Promise<TestContext> {
   const { uri, stop } = await startDatabase();
+  const videos = new FakeVideoChecker();
 
   process.env.MONGODB_URI = uri;
   process.env.DEFAULT_TIME_ZONE = process.env.DEFAULT_TIME_ZONE ?? 'Asia/Kolkata';
@@ -61,6 +87,8 @@ export async function createTestApp(): Promise<TestContext> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(TOKEN_VERIFIER)
     .useClass(StubTokenVerifier)
+    .overrideProvider(VIDEO_CHECKER)
+    .useValue(videos)
     .compile();
 
   const app = moduleRef.createNestApplication<NestExpressApplication>();
@@ -81,6 +109,7 @@ export async function createTestApp(): Promise<TestContext> {
   return {
     app,
     connection,
+    videos,
     token: (user) => user.uid,
     async createUser(user) {
       const id = new Types.ObjectId();
@@ -109,6 +138,7 @@ export async function createTestApp(): Promise<TestContext> {
         await connection.collection(name).deleteMany({});
       }
       await app.get(CategoriesService).seedMissing();
+      videos.clear();
     },
     async close() {
       await app.close();

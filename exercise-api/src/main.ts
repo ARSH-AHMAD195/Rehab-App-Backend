@@ -9,6 +9,7 @@ import { AppModule } from './app.module';
 import { MAX_BODY_SIZE } from './common/constants';
 import { validationExceptionFactory } from './common/validation-exception.factory';
 import { FirebaseTokenVerifier } from './auth/firebase-token-verifier';
+import { YouTubeVideoChecker } from './exercises/youtube-video-checker';
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('bootstrap');
@@ -30,8 +31,9 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  // Fail the boot, not the first request, when Firebase is misconfigured.
+  // Fail the boot, not the first request, when Firebase or YouTube is misconfigured.
   app.get(FirebaseTokenVerifier).assertConfigured();
+  app.get(YouTubeVideoChecker).assertConfigured();
 
   // Off unless asked for: the docs page is plain Express middleware, outside
   // the auth guard, so leaving it on would publish the API to anyone.

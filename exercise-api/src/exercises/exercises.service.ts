@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, FilterQuery, Model, Types } from 'mongoose';
 import { AUDIT_ACTIONS, DEFAULT_PAGE_LIMIT, DETAIL_CODES, VIDEO_PROVIDERS } from '../common/constants';
@@ -17,6 +17,7 @@ import {
   UpdateExerciseDto,
 } from './exercise.dto';
 import { parseYouTubeVideoId, youTubeWatchUrl } from './youtube';
+import { VIDEO_CHECKER, VIDEO_PROBLEM_ISSUES, VideoChecker } from './video-checker';
 import { ExercisePlan } from '../plans/plan.schema';
 
 /** The fields an admin edit can change, as stored. */
@@ -30,6 +31,7 @@ export class ExercisesService implements OnModuleInit {
     private readonly categories: CategoriesService,
     private readonly audit: AuditService,
     private readonly tx: TransactionRunner,
+    @Inject(VIDEO_CHECKER) private readonly videos: VideoChecker,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -38,6 +40,7 @@ export class ExercisesService implements OnModuleInit {
 
   async create(dto: CreateExerciseDto, actor: AuthUser): Promise<ExerciseResponse> {
     const video = dto.videoUrl ? toVideo(dto.videoUrl) : null;
+    if (video) await this.assertPlayable(video);
 
     const created = await this.tx.run(async (session) => {
       const category = await this.categories.lockActive(dto.categoryId, 'categoryId', session);
@@ -64,6 +67,9 @@ export class ExercisesService implements OnModuleInit {
   /** PATCH. Also how a deactivated exercise is brought back (active: true). */
   async update(id: string, dto: UpdateExerciseDto, actor: AuthUser): Promise<ExerciseResponse> {
     const changes = this.toChanges(dto);
+    // Asked even when the link is unchanged: a video that has since gone
+    // Private should be noticed, not saved over again.
+    if (changes.video) await this.assertPlayable(changes.video);
 
     return this.tx.run(async (session) => {
       const before = await this.findOrThrow(id, session);
@@ -184,6 +190,15 @@ export class ExercisesService implements OnModuleInit {
     if (dto.videoUrl !== undefined) changes.video = dto.videoUrl ? toVideo(dto.videoUrl) : null;
     if (dto.active !== undefined) changes.active = dto.active;
     return changes;
+  }
+
+  /** Outside the transaction: it waits on YouTube, and holds no lock while it does. */
+  private async assertPlayable(video: ExerciseVideo): Promise<void> {
+    const problem = await this.videos.check(video.videoId);
+    if (!problem) return;
+    throw new ValidationFailedException([
+      { field: 'videoUrl', code: DETAIL_CODES.VIDEO_NOT_PLAYABLE, issue: VIDEO_PROBLEM_ISSUES[problem] },
+    ]);
   }
 
   private async findOrThrow(id: string, session: ClientSession): Promise<ExerciseDocument> {

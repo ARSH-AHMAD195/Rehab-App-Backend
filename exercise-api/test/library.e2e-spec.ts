@@ -197,6 +197,62 @@ describe('Exercise library (categories and exercises)', () => {
       expect(res.body.details).toEqual([expect.objectContaining({ field: 'videoUrl', code: DETAIL_CODES.WRONG_SHAPE })]);
     });
 
+    it('asks YouTube about the video, and refuses one patients could not play', async () => {
+      const strength = await categoryId('STRENGTH');
+      const cases = [
+        ['prvprvprv01', 'PRIVATE', /Private.*Unlisted/],
+        ['gonegonego1', 'NOT_FOUND', /no YouTube video/],
+        ['noembednoe1', 'NOT_EMBEDDABLE', /Allow embedding/],
+        ['processing1', 'NOT_READY', /still processing/],
+      ] as const;
+
+      for (const [videoId, problem, issue] of cases) {
+        ctx.videos.problems.set(videoId, problem);
+        const res = await as(admin)
+          .post('/exercises')
+          .send({ name: 'X', categoryId: strength, videoUrl: `https://youtu.be/${videoId}` })
+          .expect(400);
+        expect(res.body.details).toEqual([
+          { field: 'videoUrl', code: DETAIL_CODES.VIDEO_NOT_PLAYABLE, issue: expect.stringMatching(issue) },
+        ]);
+      }
+      expect(ctx.videos.asked).toEqual(cases.map(([videoId]) => videoId));
+      expect(await ctx.connection.collection('exercises').countDocuments()).toBe(0);
+
+      // An Unlisted (or Public) video goes in.
+      await addExercise({ videoUrl: VIDEO_ID });
+    });
+
+    it('saves nothing, with a 503 to retry, when YouTube cannot be reached', async () => {
+      const exercise = await addExercise({ name: 'Before' });
+      ctx.videos.down = true;
+
+      const res = await as(admin)
+        .post('/exercises')
+        .send({ name: 'X', categoryId: await categoryId('STRENGTH'), videoUrl: VIDEO_ID })
+        .expect(503);
+      expect(res.body).toMatchObject({ statusCode: 503, code: ERROR_CODES.VIDEO_CHECK_UNAVAILABLE, error: 'Service Unavailable' });
+
+      await as(admin).patch(`/exercises/${exercise.id}`).send({ name: 'After', videoUrl: VIDEO_ID }).expect(503);
+      const stored = await ctx.connection.collection('exercises').findOne({});
+      expect(stored).toMatchObject({ name: 'Before', video: null });
+      expect(await ctx.connection.collection('exercises').countDocuments()).toBe(1);
+
+      // Changes without a video, and removing one, don't need YouTube.
+      await as(admin).patch(`/exercises/${exercise.id}`).send({ name: 'After', videoUrl: null }).expect(200);
+    });
+
+    it('checks the video again on an edit, so one that went Private is not saved over', async () => {
+      const exercise = await addExercise({ videoUrl: VIDEO_ID });
+      ctx.videos.problems.set(VIDEO_ID, 'PRIVATE');
+
+      const res = await as(admin).patch(`/exercises/${exercise.id}`).send({ name: 'Renamed', videoUrl: VIDEO_ID }).expect(400);
+      expect(res.body.details[0]).toMatchObject({ field: 'videoUrl', code: DETAIL_CODES.VIDEO_NOT_PLAYABLE });
+
+      // Leaving the video out of the edit leaves it alone.
+      await as(admin).patch(`/exercises/${exercise.id}`).send({ name: 'Renamed' }).expect(200);
+    });
+
     it('refuses an unknown or deactivated category', async () => {
       const unknown = await as(admin)
         .post('/exercises')

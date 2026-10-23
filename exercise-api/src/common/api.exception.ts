@@ -95,6 +95,17 @@ export class IdempotencyKeyReusedException extends ApiException {
   }
 }
 
+/** YouTube didn't answer whether a video plays, so nothing was saved and the same request can be sent again. */
+export class VideoCheckUnavailableException extends ApiException {
+  constructor() {
+    super(
+      HttpStatus.SERVICE_UNAVAILABLE,
+      ERROR_CODES.VIDEO_CHECK_UNAVAILABLE,
+      "Couldn't check the video with YouTube. Nothing was saved; try again in a moment.",
+    );
+  }
+}
+
 /** A concurrent write won the race, so nothing was saved and the same request can be sent again. */
 export class ConcurrentUpdateException extends ApiException {
   constructor(message = 'The record changed while saving. Retry the request.') {
