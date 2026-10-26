@@ -19,6 +19,7 @@ async function bootstrap(): Promise<void> {
   app.use(json({ limit: '16kb' }));
   // Needed for the per-IP rate limit behind a load balancer.
   app.set('trust proxy', 1);
+  app.set('etag', false);
   // Lets the web app call this API from a browser (see common/cors.ts).
   app.enableCors(corsOptions(config.get<string>('CORS_ORIGINS')));
 
