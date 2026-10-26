@@ -7,6 +7,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { json } from 'express';
 import { AppModule } from './app.module';
 import { MAX_BODY_SIZE } from './common/constants';
+import { corsOptions } from './common/cors';
 import { validationExceptionFactory } from './common/validation-exception.factory';
 import { FirebaseTokenVerifier } from './auth/firebase-token-verifier';
 import { YouTubeVideoChecker } from './exercises/youtube-video-checker';
@@ -21,6 +22,8 @@ async function bootstrap(): Promise<void> {
 
   // Needed for the per-IP rate limit behind a load balancer.
   app.set('trust proxy', 1);
+  // Lets the web app call this API from a browser (see common/cors.ts).
+  app.enableCors(corsOptions(config.get<string>('CORS_ORIGINS')));
 
   app.useGlobalPipes(
     new ValidationPipe({
