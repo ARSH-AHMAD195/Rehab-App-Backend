@@ -42,6 +42,13 @@ export class ForbiddenRoleException extends ApiException {
   }
 }
 
+/** 403, not 401: the session is fine, the user just has to verify their email first. */
+export class EmailNotVerifiedException extends ApiException {
+  constructor() {
+    super(HttpStatus.FORBIDDEN, ERROR_CODES.EMAIL_NOT_VERIFIED, 'Verify your email address before using this route');
+  }
+}
+
 /**
  * Also returned when a record belongs to a patient the caller can't access, so
  * a doctor can't tell whether that patient exists (v1.1, Doctor endpoints).

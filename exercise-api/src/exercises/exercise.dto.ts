@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsMongoId,
   IsOptional,
@@ -15,7 +16,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { DEFAULT_PAGE_LIMIT, LIMITS, MAX_PAGE_LIMIT } from '../common/constants';
-import { toBoolean, trim } from '../categories/category.dto';
+import { trim } from '../categories/category.dto';
 
 const trimEach = ({ value }: { value: unknown }) =>
   Array.isArray(value) ? value.map((step) => (typeof step === 'string' ? step.trim() : step)) : value;
@@ -79,9 +80,12 @@ export class ListExercisesQueryDto {
   @IsOptional() @IsString() @MaxLength(30)
   category?: string;
 
-  @ApiPropertyOptional({ description: 'true (default) or false for deactivated ones' })
-  @IsOptional() @Transform(toBoolean) @IsBoolean()
-  active?: boolean;
+  @ApiPropertyOptional({
+    enum: ['true', 'false', 'all'],
+    description: "true (default): active only. false: deactivated only. all: both. Same as the Auth API's lists. A patient sees all of their plan unless they ask.",
+  })
+  @IsOptional() @IsIn(['true', 'false', 'all'])
+  active?: 'true' | 'false' | 'all';
 
   @ApiPropertyOptional({ description: 'Part of the name, any case' })
   @IsOptional() @Transform(trim) @IsString() @MaxLength(LIMITS.SEARCH)

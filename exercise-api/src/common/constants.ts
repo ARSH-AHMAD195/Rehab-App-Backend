@@ -9,6 +9,8 @@ export const ERROR_CODES = {
   VALIDATION_FAILED: 'VALIDATION_FAILED',
   UNAUTHENTICATED: 'UNAUTHENTICATED',
   FORBIDDEN_ROLE: 'FORBIDDEN_ROLE',
+  /** Signed in, but the email isn't verified yet. Same code and status (403) as the Auth API. */
+  EMAIL_NOT_VERIFIED: 'EMAIL_NOT_VERIFIED',
   NOT_FOUND: 'NOT_FOUND',
   /** The record changed under a concurrent write; the same request can be retried. */
   CONCURRENT_UPDATE: 'CONCURRENT_UPDATE',

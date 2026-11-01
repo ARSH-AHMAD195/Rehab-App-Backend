@@ -173,7 +173,7 @@ Health Monitoring.
 | POST | `/exercise-categories` | Admin | Add a category (`code`, `name`, optional `order`) |
 | PATCH | `/exercise-categories/:categoryId` | Admin | Rename, reorder, deactivate, reactivate. The code can't change |
 | DELETE | `/exercise-categories/:categoryId` | Admin | Deactivate (refused while active exercises use it) |
-| GET | `/exercises` | All | Admin and doctor: the library, A to Z (filter by `category` code, `active=true\|false`, search `q`; paged). **Patient: only exercises in their current plan** |
+| GET | `/exercises` | All | Admin and doctor: the library, A to Z (filter by `category` code, search `q`; paged). `active=true` (default) for active ones, `false` for deactivated ones, `all` for both, as in the Auth API's lists. Any other parameter (such as `activeOnly`) is refused with 400. **Patient: only exercises in their current plan** |
 | GET | `/exercises/:exerciseId` | All | One exercise, active or not. A patient gets 404 unless it's in their plan |
 | POST | `/exercises` | Admin | Add an exercise (`name`, `categoryId`, optional `description`, `instructions`, `videoUrl`) |
 | PATCH | `/exercises/:exerciseId` | Admin | Change it, including the video; `active: true` brings it back |
@@ -313,6 +313,7 @@ Same format and codes as Health Monitoring, plus:
 
 | Status | `code` | When |
 |---|---|---|
+| 403 | `EMAIL_NOT_VERIFIED` | Signed in, but the email isn't verified yet. Same as the Auth API and Health Monitoring |
 | 409 | `EXERCISE_NOT_IN_PLAN` | A completion for an item that isn't in the patient's current plan, or isn't planned for today |
 | 409 | `EXERCISE_ALREADY_DONE` | Already done the planned number of times today |
 | 409 | `DAY_CHANGED` | A completion whose `date` isn't the patient's today, or undoing an earlier day's tick |

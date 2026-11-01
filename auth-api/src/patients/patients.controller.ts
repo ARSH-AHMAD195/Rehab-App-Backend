@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { PatientListDoc, PatientResponseDoc, RegisteredPatientDoc } from '../common/response-docs';
 import { RATE_LIMITS, ROLES } from '../common/constants';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -26,12 +27,14 @@ export class PatientsController {
     summary: 'Register a patient',
     description: 'Doctor: the patient is linked to you. Admin: doctorIds is required.',
   })
+  @ApiCreatedResponse({ type: RegisteredPatientDoc })
   register(@CurrentUser() caller: AuthUser, @Body() body: RegisterPatientDto): Promise<PatientResponse & { invitation: string }> {
     return this.patients.register(caller, body);
   }
 
   @Get()
   @ApiOperation({ summary: 'Patient list', description: 'Doctor: linked patients only. Admin: all.' })
+  @ApiOkResponse({ type: PatientListDoc })
   list(
     @CurrentUser() caller: AuthUser,
     @Query() query: PatientListQueryDto,
@@ -41,12 +44,14 @@ export class PatientsController {
 
   @Get(':patientId')
   @ApiOperation({ summary: 'One patient' })
+  @ApiOkResponse({ type: PatientResponseDoc })
   get(@CurrentUser() caller: AuthUser, @Param('patientId') patientId: string): Promise<PatientResponse> {
     return this.patients.get(caller, patientId);
   }
 
   @Patch(':patientId')
   @ApiOperation({ summary: "Update a patient's basic details", description: 'Only an admin may send `active`.' })
+  @ApiOkResponse({ type: PatientResponseDoc })
   update(
     @CurrentUser() caller: AuthUser,
     @Param('patientId') patientId: string,
@@ -58,6 +63,7 @@ export class PatientsController {
   @Put(':patientId/doctors')
   @Roles(ROLES.ADMIN)
   @ApiOperation({ summary: 'Set which doctors a patient is linked to', description: 'Replaces the list: 1-10 active doctors.' })
+  @ApiOkResponse({ type: PatientResponseDoc })
   setDoctors(
     @CurrentUser() admin: AuthUser,
     @Param('patientId') patientId: string,

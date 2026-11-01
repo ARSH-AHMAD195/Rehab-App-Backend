@@ -47,11 +47,14 @@ export interface TestContext {
   close(): Promise<void>;
 }
 
-/** Resolves the bearer token to a uid, standing in for verifyIdToken. */
+/**
+ * Resolves the bearer token to a uid, standing in for verifyIdToken. Every
+ * user's email is verified, except uids starting with "unverified-".
+ */
 class StubTokenVerifier implements TokenVerifier {
-  async verify(idToken: string): Promise<{ uid: string }> {
+  async verify(idToken: string): Promise<{ uid: string; emailVerified: boolean }> {
     if (!idToken || idToken === 'invalid') throw new UnauthenticatedException();
-    return { uid: idToken };
+    return { uid: idToken, emailVerified: !idToken.startsWith('unverified-') };
   }
 }
 

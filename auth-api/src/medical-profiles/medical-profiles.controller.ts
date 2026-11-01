@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Patch } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { MedicalProfileResponseDoc } from '../common/response-docs';
 import { ROLES } from '../common/constants';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -27,6 +28,7 @@ export class MyMedicalProfileController {
 
   @Get()
   @ApiOperation({ summary: 'My medical profile', description: 'Every field null and version 0 until first saved.' })
+  @ApiOkResponse({ type: MedicalProfileResponseDoc })
   async get(@CurrentUser() patient: AuthUser): Promise<MedicalProfileResponse> {
     return this.profiles.get((await this.users.model.findById(patient.id).exec())!);
   }
@@ -36,6 +38,7 @@ export class MyMedicalProfileController {
     summary: 'Update my medical profile',
     description: 'Send only changed fields plus the version you read. 409 CONCURRENT_UPDATE if someone saved first.',
   })
+  @ApiOkResponse({ type: MedicalProfileResponseDoc })
   async update(@CurrentUser() patient: AuthUser, @Body() body: UpdateMedicalProfileDto): Promise<MedicalProfileResponse> {
     return this.profiles.update(patient, (await this.users.model.findById(patient.id).exec())!, body);
   }
@@ -54,6 +57,7 @@ export class PatientMedicalProfileController {
 
   @Get()
   @ApiOperation({ summary: "A linked patient's medical profile", description: 'Each read is audited.' })
+  @ApiOkResponse({ type: MedicalProfileResponseDoc })
   async get(@CurrentUser() doctor: AuthUser, @Param('patientId') patientId: string): Promise<MedicalProfileResponse> {
     const patient = await this.users.getPatientFor(doctor, patientId);
     return this.profiles.getAsDoctor(doctor, patient);
@@ -61,6 +65,7 @@ export class PatientMedicalProfileController {
 
   @Patch()
   @ApiOperation({ summary: "Update a linked patient's medical profile" })
+  @ApiOkResponse({ type: MedicalProfileResponseDoc })
   async update(
     @CurrentUser() doctor: AuthUser,
     @Param('patientId') patientId: string,

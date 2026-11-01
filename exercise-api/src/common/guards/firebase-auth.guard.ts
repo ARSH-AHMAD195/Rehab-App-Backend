@@ -1,6 +1,6 @@
 import { CanActivate, ExecutionContext, Inject, Injectable } from '@nestjs/common';
 import { Request } from 'express';
-import { UnauthenticatedException } from '../api.exception';
+import { EmailNotVerifiedException, UnauthenticatedException } from '../api.exception';
 import { TOKEN_VERIFIER, TokenVerifier } from '../../auth/token-verifier';
 import { AuthUser, UsersService } from '../../users/users.service';
 
@@ -8,7 +8,8 @@ import { AuthUser, UsersService } from '../../users/users.service';
  * Every route needs `Authorization: Bearer <Firebase ID token>`.
  * 401 UNAUTHENTICATED when the token is missing, invalid or expired, or when
  * the token is valid but no active profile exists for that uid - without a
- * profile the caller has no role, so no route can be served.
+ * profile the caller has no role, so no route can be served. 403
+ * EMAIL_NOT_VERIFIED until the email is verified, as in the Auth API.
  */
 @Injectable()
 export class FirebaseAuthGuard implements CanActivate {
@@ -21,9 +22,10 @@ export class FirebaseAuthGuard implements CanActivate {
     const req = ctx.switchToHttp().getRequest<Request & { user?: AuthUser }>();
     const token = this.extractBearer(req.headers.authorization);
 
-    const { uid } = await this.verifier.verify(token);
+    const { uid, emailVerified } = await this.verifier.verify(token);
     const user = await this.users.findByFirebaseUid(uid);
     if (!user) throw new UnauthenticatedException('No active user profile for this token');
+    if (!emailVerified) throw new EmailNotVerifiedException();
 
     req.user = user;
     return true;

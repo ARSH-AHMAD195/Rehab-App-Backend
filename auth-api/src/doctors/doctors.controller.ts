@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { DoctorListDoc, DoctorResponseDoc, RegisteredDoctorDoc } from '../common/response-docs';
 import { RATE_LIMITS, ROLES } from '../common/constants';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -19,18 +20,21 @@ export class DoctorsController {
   @Post()
   @Throttle({ [RATE_LIMITS.USER.name]: RATE_LIMITS.REGISTER })
   @ApiOperation({ summary: 'Register a doctor', description: 'Firebase emails them a link to set their password.' })
+  @ApiCreatedResponse({ type: RegisteredDoctorDoc })
   register(@CurrentUser() admin: AuthUser, @Body() body: RegisterDoctorDto): Promise<DoctorResponse & { invitation: string }> {
     return this.doctors.register(admin, body);
   }
 
   @Get()
   @ApiOperation({ summary: 'List doctors', description: 'Sorted by name. Defaults to active doctors.' })
+  @ApiOkResponse({ type: DoctorListDoc })
   list(@Query() query: UserListQueryDto): Promise<{ data: DoctorResponse[]; nextCursor: string | null }> {
     return this.doctors.list(query);
   }
 
   @Get(':doctorId')
   @ApiOperation({ summary: 'One doctor' })
+  @ApiOkResponse({ type: DoctorResponseDoc })
   get(@Param('doctorId') doctorId: string): Promise<DoctorResponse> {
     return this.doctors.get(doctorId);
   }
@@ -40,6 +44,7 @@ export class DoctorsController {
     summary: 'Update, deactivate or reactivate a doctor',
     description: '409 DOCTOR_HAS_PATIENTS when deactivating would leave an active patient with no doctor.',
   })
+  @ApiOkResponse({ type: DoctorResponseDoc })
   update(
     @CurrentUser() admin: AuthUser,
     @Param('doctorId') doctorId: string,
