@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -8,9 +9,18 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { CHECKLIST_STATUS, COMPLETION_LIMITS, ChecklistStatus, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT } from '../common/constants';
+import {
+  CHECKLIST_STATUS,
+  COMPLETION_LIMITS,
+  COMPLETION_STATUS,
+  ChecklistStatus,
+  CompletionStatus,
+  DEFAULT_PAGE_LIMIT,
+  MAX_PAGE_LIMIT,
+} from '../common/constants';
 import { trim } from '../categories/category.dto';
 import { IsCalendarDate } from '../time/day.service';
 import { PlanExerciseResponse } from '../plans/plan.dto';
@@ -35,7 +45,20 @@ export class RecordCompletionDto {
   @IsCalendarDate()
   date!: string;
 
-  @ApiPropertyOptional({ type: CompletionDetailsDto, nullable: true, description: 'Optional. ⏳ waiting for the client' })
+  @ApiPropertyOptional({
+    enum: Object.values(COMPLETION_STATUS),
+    default: COMPLETION_STATUS.DONE,
+    description: 'DONE (default): one tick. SKIPPED: skip the rest of this exercise today; needs a reason.',
+  })
+  @IsOptional() @IsIn(Object.values(COMPLETION_STATUS))
+  status?: CompletionStatus;
+
+  @ApiPropertyOptional({ example: 'Knee pain this morning', description: 'Why it was skipped. Required with SKIPPED, refused otherwise.' })
+  @ValidateIf((dto: RecordCompletionDto) => dto.status === COMPLETION_STATUS.SKIPPED || dto.reason !== undefined)
+  @Transform(trim) @IsString() @MinLength(1) @MaxLength(COMPLETION_LIMITS.SKIP_REASON)
+  reason?: string;
+
+  @ApiPropertyOptional({ type: CompletionDetailsDto, nullable: true, description: 'Optional, ticks only. ⏳ waiting for the client' })
   @IsOptional() @ValidateNested() @Type(() => CompletionDetailsDto)
   details?: CompletionDetailsDto | null;
 }
@@ -76,7 +99,10 @@ export class CompletionResponse {
   @ApiProperty({ type: CompletionExerciseResponse }) exercise!: CompletionExerciseResponse;
   @ApiProperty({ example: 3 }) planVersion!: number;
   @ApiProperty({ example: '2026-10-20' }) date!: string;
-  @ApiProperty({ example: '2026-10-20T08:15:00+05:30' }) completedAt!: string;
+  @ApiProperty({ enum: Object.values(COMPLETION_STATUS) }) status!: CompletionStatus;
+  @ApiProperty({ nullable: true, type: String, example: null, description: 'Why it was skipped; null for a tick' })
+  reason!: string | null;
+  @ApiProperty({ example: '2026-10-20T08:15:00+05:30', description: 'When it was ticked, or skipped' }) completedAt!: string;
   @ApiProperty({ type: CompletionDetailsDto, nullable: true })
   details!: { durationMin: number | null; note: string | null } | null;
 }
@@ -91,6 +117,12 @@ export class ChecklistDoneResponse {
   @ApiProperty({ example: '2026-10-20T08:15:00+05:30' }) completedAt!: string;
 }
 
+export class ChecklistSkipResponse {
+  @ApiProperty({ description: 'What undo takes' }) id!: string;
+  @ApiProperty({ example: 'Knee pain this morning' }) reason!: string;
+  @ApiProperty({ example: '2026-10-20T09:00:00+05:30' }) skippedAt!: string;
+}
+
 export class ChecklistItemResponse {
   @ApiProperty() itemId!: string;
   @ApiProperty({ type: PlanExerciseResponse }) exercise!: PlanExerciseResponse;
@@ -99,6 +131,8 @@ export class ChecklistItemResponse {
   @ApiProperty({ enum: Object.values(CHECKLIST_STATUS) }) status!: ChecklistStatus;
   @ApiProperty({ type: [ChecklistDoneResponse], description: "Today's ticks, oldest first; their ids are what undo takes" })
   completions!: ChecklistDoneResponse[];
+  @ApiProperty({ type: ChecklistSkipResponse, nullable: true, description: 'Set when the item was skipped that day' })
+  skip!: ChecklistSkipResponse | null;
   @ApiProperty({ nullable: true }) target!: { sets: number | null; reps: number | null; durationMin: number | null } | null;
   @ApiProperty({ nullable: true, type: String }) notes!: string | null;
 }
@@ -108,5 +142,6 @@ export class ChecklistResponse {
   @ApiProperty({ example: 3, description: 'The plan version that applied that day; 0 if none' }) planVersion!: number;
   @ApiProperty({ type: [ChecklistItemResponse] }) items!: ChecklistItemResponse[];
   @ApiProperty({ description: 'Ticks that count, at most timesPerDay per item' }) doneCount!: number;
+  @ApiProperty({ description: 'Planned times left undone because the item was skipped' }) skippedCount!: number;
   @ApiProperty({ description: 'Sum of timesPerDay over the items planned that day' }) plannedCount!: number;
 }

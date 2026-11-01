@@ -20,6 +20,8 @@ export const ERROR_CODES = {
   EXERCISE_NOT_IN_PLAN: 'EXERCISE_NOT_IN_PLAN',
   /** Already done the planned number of times today. */
   EXERCISE_ALREADY_DONE: 'EXERCISE_ALREADY_DONE',
+  /** Skipped for today: undo the skip before ticking it, or skipping it again. */
+  EXERCISE_SKIPPED: 'EXERCISE_SKIPPED',
   /** Idempotency-Key, same as Health Monitoring: still being processed (409) or reused for another body (422). */
   IDEMPOTENCY_KEY_IN_USE: 'IDEMPOTENCY_KEY_IN_USE',
   IDEMPOTENCY_KEY_REUSED: 'IDEMPOTENCY_KEY_REUSED',
@@ -60,6 +62,7 @@ export const AUDIT_ACTIONS = {
   /** A patient ticks an exercise off, or undoes a tick. Changes to patient data, as in Health Monitoring. */
   EXERCISE_COMPLETION_RECORDED: 'EXERCISE_COMPLETION_RECORDED',
   EXERCISE_COMPLETION_UNDONE: 'EXERCISE_COMPLETION_UNDONE',
+  EXERCISE_SKIPPED: 'EXERCISE_SKIPPED',
 } as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
 
@@ -70,7 +73,8 @@ export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
 export const EVENT_TYPES = {
   PLAN_ASSIGNED: 'exercise.plan.assigned',
   COMPLETED: 'exercise.completed',
-  /** So the timeline can take back an exercise.completed it already showed. */
+  SKIPPED: 'exercise.skipped',
+  /** So the timeline can take back an exercise.completed (or .skipped) it already showed. */
   COMPLETION_UNDONE: 'exercise.completion.undone',
 } as const;
 export type EventType = (typeof EVENT_TYPES)[keyof typeof EVENT_TYPES];
@@ -91,7 +95,12 @@ export const PLAN_LIMITS = {
 export const COMPLETION_LIMITS = {
   DURATION_MIN: 240,
   NOTE: 500,
+  SKIP_REASON: 500,
 } as const;
+
+/** What a completion row records: a tick, or "skipped today" with a reason. */
+export const COMPLETION_STATUS = { DONE: 'DONE', SKIPPED: 'SKIPPED' } as const;
+export type CompletionStatus = (typeof COMPLETION_STATUS)[keyof typeof COMPLETION_STATUS];
 
 /** Completion history defaults to the last 30 days, like Health Monitoring's logs. */
 export const DEFAULT_HISTORY_DAYS = 30;
@@ -105,6 +114,8 @@ export const CHECKLIST_STATUS = {
   NOT_YET: 'NOT_YET',
   PARTLY_DONE: 'PARTLY_DONE',
   DONE: 'DONE',
+  /** Skipped for the rest of the day, with a reason. */
+  SKIPPED: 'SKIPPED',
 } as const;
 export type ChecklistStatus = (typeof CHECKLIST_STATUS)[keyof typeof CHECKLIST_STATUS];
 

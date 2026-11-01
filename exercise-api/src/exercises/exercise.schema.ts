@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
-import { VIDEO_PROVIDERS, VideoProvider } from '../common/constants';
+import { ROLES, Role, VIDEO_PROVIDERS, VideoProvider } from '../common/constants';
 
 @Schema({ _id: false })
 export class ExerciseVideo {
@@ -14,7 +14,7 @@ const ExerciseVideoSchema = SchemaFactory.createForClass(ExerciseVideo);
 
 /**
  * One exercise in the library. The content comes from the clinical team; an
- * admin enters it.
+ * admin or a doctor enters it.
  *
  * Exercises are never deleted, only deactivated, so plans and completions
  * that point at one keep working.
@@ -48,6 +48,10 @@ export class Exercise {
 
   @Prop({ required: true, default: true })
   active!: boolean;
+
+  /** Who added it. Null for exercises added before this was recorded. A doctor may edit only their own. */
+  @Prop({ type: { id: Types.ObjectId, role: { type: String, enum: Object.values(ROLES) } }, default: null, _id: false })
+  createdBy!: { id: Types.ObjectId; role: Role } | null;
 
   createdAt!: Date;
   updatedAt!: Date;

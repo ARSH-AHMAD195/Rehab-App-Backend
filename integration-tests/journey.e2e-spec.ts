@@ -186,8 +186,8 @@ describe('Auth + Health Monitoring + Exercise APIs, one database', () => {
       .expect(201)).body;
     const walk = (await ex().post('/api/v1/exercises').set('Authorization', admin)
       .send({ name: 'Brisk walk', categoryId: walking.id }).expect(201)).body;
-    // A doctor or patient can't change the library.
-    await ex().post('/api/v1/exercises').set('Authorization', bearer(uidA)).send({ name: 'X', categoryId: strength.id }).expect(403);
+    // A doctor can't change an exercise the admin added.
+    await ex().patch(`/api/v1/exercises/${knee.id}`).set('Authorization', bearer(uidA)).send({ name: 'X' }).expect(403);
 
     // 5. EXERCISE: Dr Meera, linked in Auth, assigns a plan. Dr Arjun, not linked, can't see the patient.
     const plan = (await ex().put(`/api/v1/patients/${patient.id}/exercise-plan`).set('Authorization', bearer(uidA))

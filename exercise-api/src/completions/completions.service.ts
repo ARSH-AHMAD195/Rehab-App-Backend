@@ -5,6 +5,7 @@ import { FilterQuery, Model, Types } from 'mongoose';
 import {
   AUDIT_ACTIONS,
   CHECKLIST_STATUS,
+  COMPLETION_STATUS,
   DEFAULT_HISTORY_DAYS,
   DEFAULT_PAGE_LIMIT,
   DETAIL_CODES,
@@ -14,6 +15,7 @@ import {
   DayChangedException,
   ExerciseAlreadyDoneException,
   ExerciseNotInPlanException,
+  ExerciseSkippedException,
   NotFoundException,
   ValidationFailedException,
 } from '../common/api.exception';
@@ -25,7 +27,7 @@ import { DayService } from '../time/day.service';
 import { AuthUser, UsersService } from '../users/users.service';
 import { ExercisesService } from '../exercises/exercises.service';
 import { PlansService } from '../plans/plans.service';
-import { ExerciseCompletion, ExerciseCompletionDocument } from './completion.schema';
+import { ExerciseCompletion, ExerciseCompletionDocument, SKIP_SLOT } from './completion.schema';
 import {
   ChecklistResponse,
   CompletionListResponse,
@@ -53,13 +55,27 @@ export class CompletionsService implements OnModuleInit {
   }
 
   /**
-   * POST /exercise-completions: "I did this one". Checks, in order:
+   * POST /exercise-completions: "I did this one", or with status SKIPPED,
+   * "I'm skipping the rest of this one today, because...". Checks, in order:
    *  1. the item is in the patient's current plan          -> 409 EXERCISE_NOT_IN_PLAN
    *  2. `date` is the patient's today                      -> 409 DAY_CHANGED
    *  3. the item is planned for today's day of the week    -> 409 EXERCISE_NOT_IN_PLAN
-   *  4. it hasn't been done timesPerDay times today yet    -> 409 EXERCISE_ALREADY_DONE
+   *  4. it hasn't been skipped today                       -> 409 EXERCISE_SKIPPED
+   *  5. it hasn't been done timesPerDay times today yet    -> 409 EXERCISE_ALREADY_DONE
    */
   async record(patient: AuthUser, dto: RecordCompletionDto): Promise<CompletionResponse> {
+    const skipping = dto.status === COMPLETION_STATUS.SKIPPED;
+    // The DTO checks the reason is there with SKIPPED; these are the other way round.
+    if (!skipping && dto.reason !== undefined) {
+      throw new ValidationFailedException([
+        { field: 'reason', code: DETAIL_CODES.NOT_ALLOWED, issue: 'is only sent with status SKIPPED' },
+      ]);
+    }
+    if (skipping && dto.details) {
+      throw new ValidationFailedException([
+        { field: 'details', code: DETAIL_CODES.NOT_ALLOWED, issue: 'is only sent with a tick, not a skip' },
+      ]);
+    }
     const today = this.day.today(patient.timeZone);
 
     const saved = await this.tx.run(async (session) => {
@@ -83,9 +99,11 @@ export class CompletionsService implements OnModuleInit {
         .session(session)
         .lean();
       const used = new Set(taken.map((done) => done.slot));
-      const slot = Array.from({ length: item.schedule.timesPerDay }, (_, i) => i).find((i) => !used.has(i));
+      if (used.has(SKIP_SLOT)) throw new ExerciseSkippedException();
+      const free = Array.from({ length: item.schedule.timesPerDay }, (_, i) => i).find((i) => !used.has(i));
       // ⏳ Extra completions: refused beyond the planned number until the client says otherwise.
-      if (slot === undefined) throw new ExerciseAlreadyDoneException(item.schedule.timesPerDay);
+      // Nothing is left to skip once it's all done, either.
+      if (free === undefined) throw new ExerciseAlreadyDoneException(item.schedule.timesPerDay);
 
       const details = dto.details ? { durationMin: dto.details.durationMin ?? null, note: dto.details.note || null } : null;
       const [completion] = await this.model.create(
@@ -96,7 +114,10 @@ export class CompletionsService implements OnModuleInit {
             exerciseId: item.exerciseId,
             planVersion: plan.version,
             date: today,
-            slot,
+            // The unique index allows one active skip per item per day, as it does one tick per slot.
+            slot: skipping ? SKIP_SLOT : free,
+            status: skipping ? COMPLETION_STATUS.SKIPPED : COMPLETION_STATUS.DONE,
+            skipReason: skipping ? dto.reason : null,
             completedAt: new Date(),
             details: details && (details.durationMin !== null || details.note !== null) ? details : null,
           },
@@ -107,17 +128,22 @@ export class CompletionsService implements OnModuleInit {
       await this.audit.record(
         {
           actor: patient,
-          action: AUDIT_ACTIONS.EXERCISE_COMPLETION_RECORDED,
+          action: skipping ? AUDIT_ACTIONS.EXERCISE_SKIPPED : AUDIT_ACTIONS.EXERCISE_COMPLETION_RECORDED,
           patientId: patient.id,
           resourceId: String(completion._id),
-          after: { itemId: completion.itemId, exerciseId: String(completion.exerciseId), date: today, details: completion.details },
+          after: {
+            itemId: completion.itemId,
+            exerciseId: String(completion.exerciseId),
+            date: today,
+            ...(skipping ? { reason: completion.skipReason } : { details: completion.details }),
+          },
         },
         session,
       );
       await this.outbox.enqueue(
         [
           {
-            type: EVENT_TYPES.COMPLETED,
+            type: skipping ? EVENT_TYPES.SKIPPED : EVENT_TYPES.COMPLETED,
             patientId: patient.id,
             occurredAt: completion.completedAt,
             data: {
@@ -126,6 +152,7 @@ export class CompletionsService implements OnModuleInit {
               exerciseId: String(completion.exerciseId),
               planVersion: completion.planVersion,
               date: today,
+              ...(skipping ? { reason: completion.skipReason } : {}),
             },
           },
         ],
@@ -137,7 +164,7 @@ export class CompletionsService implements OnModuleInit {
     return (await this.respond([saved], patient.timeZone))[0];
   }
 
-  /** DELETE /exercise-completions/:id. ⏳ Edit and undo: same day only, until the client decides. */
+  /** DELETE /exercise-completions/:id: undoes a tick or a skip. ⏳ Same day only, until the client decides. */
   async undo(patient: AuthUser, completionId: string): Promise<void> {
     const filter = Types.ObjectId.isValid(completionId)
       ? { _id: new Types.ObjectId(completionId), patientId: new Types.ObjectId(patient.id), active: true }
@@ -164,7 +191,12 @@ export class CompletionsService implements OnModuleInit {
           action: AUDIT_ACTIONS.EXERCISE_COMPLETION_UNDONE,
           patientId: patient.id,
           resourceId: completionId,
-          before: { itemId: completion.itemId, exerciseId: String(completion.exerciseId), date: completion.date },
+          before: {
+            itemId: completion.itemId,
+            exerciseId: String(completion.exerciseId),
+            date: completion.date,
+            status: completion.status ?? COMPLETION_STATUS.DONE,
+          },
         },
         session,
       );
@@ -216,7 +248,7 @@ export class CompletionsService implements OnModuleInit {
    */
   private async checklist(patientId: string, date: string, timeZone: string): Promise<ChecklistResponse> {
     const plan = await this.plans.planOn(patientId, date, timeZone);
-    if (!plan) return { date, planVersion: 0, items: [], doneCount: 0, plannedCount: 0 };
+    if (!plan) return { date, planVersion: 0, items: [], doneCount: 0, skippedCount: 0, plannedCount: 0 };
 
     const weekday = this.day.dayOfWeek(date);
     const planned = (await this.plans.itemsWithExercises(plan)).filter((item) =>
@@ -228,24 +260,37 @@ export class CompletionsService implements OnModuleInit {
       .sort({ completedAt: 1 })
       .lean();
     const byItem = new Map<string, typeof done>();
+    const skips = new Map<string, (typeof done)[number]>();
     for (const completion of done) {
-      byItem.set(completion.itemId, [...(byItem.get(completion.itemId) ?? []), completion]);
+      if (completion.status === COMPLETION_STATUS.SKIPPED) skips.set(completion.itemId, completion);
+      else byItem.set(completion.itemId, [...(byItem.get(completion.itemId) ?? []), completion]);
     }
 
     const items = planned.map((item) => {
       const ticks = byItem.get(item.itemId) ?? [];
+      const skip = skips.get(item.itemId);
       const times = item.schedule.timesPerDay;
       // A tick made before the doctor lowered timesPerDay still shows, but
       // can't push the count past what is now planned.
       const doneCount = Math.min(ticks.length, times);
+      const status =
+        doneCount === times
+          ? CHECKLIST_STATUS.DONE
+          : skip
+            ? CHECKLIST_STATUS.SKIPPED
+            : doneCount === 0
+              ? CHECKLIST_STATUS.NOT_YET
+              : CHECKLIST_STATUS.PARTLY_DONE;
       return {
         itemId: item.itemId,
         exercise: item.exercise,
         timesPerDay: times,
         doneCount,
-        status:
-          doneCount === 0 ? CHECKLIST_STATUS.NOT_YET : doneCount < times ? CHECKLIST_STATUS.PARTLY_DONE : CHECKLIST_STATUS.DONE,
+        status,
         completions: ticks.map((tick) => ({ id: String(tick._id), completedAt: this.day.toLocalIso(tick.completedAt, timeZone)! })),
+        skip: skip
+          ? { id: String(skip._id), reason: skip.skipReason ?? '', skippedAt: this.day.toLocalIso(skip.completedAt, timeZone)! }
+          : null,
         target: item.target,
         notes: item.notes,
       };
@@ -256,11 +301,12 @@ export class CompletionsService implements OnModuleInit {
       planVersion: plan.version,
       items,
       doneCount: items.reduce((sum, item) => sum + item.doneCount, 0),
+      skippedCount: items.reduce((sum, item) => sum + (item.skip ? item.timesPerDay - item.doneCount : 0), 0),
       plannedCount: items.reduce((sum, item) => sum + item.timesPerDay, 0),
     };
   }
 
-  /** Ticks between two local dates, newest first, a page at a time. Undone ticks are left out. */
+  /** Ticks and skips between two local dates, newest first, a page at a time. Undone ones are left out. */
   private async history(patientId: string, timeZone: string, query: HistoryQueryDto): Promise<CompletionListResponse> {
     const { from, to } = this.day.range(timeZone, DEFAULT_HISTORY_DAYS, query.from, query.to);
     const limit = query.limit ?? DEFAULT_PAGE_LIMIT;
@@ -306,6 +352,8 @@ export class CompletionsService implements OnModuleInit {
         exercise: { id: String(row.exerciseId), name: exercise?.name ?? '', category: exercise?.category ?? '' },
         planVersion: row.planVersion,
         date: row.date,
+        status: row.status ?? COMPLETION_STATUS.DONE,
+        reason: row.skipReason ?? null,
         completedAt: this.day.toLocalIso(row.completedAt, timeZone)!,
         details: row.details ? { durationMin: row.details.durationMin, note: row.details.note } : null,
       };

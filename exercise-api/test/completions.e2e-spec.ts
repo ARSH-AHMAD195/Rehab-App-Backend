@@ -78,7 +78,7 @@ describe('Checklist, completions and history', () => {
   describe("today's checklist", () => {
     it('is empty before any plan', async () => {
       const res = await as(patient).get('/patients/me/exercise-checklist').expect(200);
-      expect(res.body).toEqual({ date: today(), planVersion: 0, items: [], doneCount: 0, plannedCount: 0 });
+      expect(res.body).toEqual({ date: today(), planVersion: 0, items: [], doneCount: 0, skippedCount: 0, plannedCount: 0 });
     });
 
     it("lists only what is planned for today's day of the week", async () => {
@@ -263,6 +263,80 @@ describe('Checklist, completions and history', () => {
 
       const res = await as(patient).delete(`/exercise-completions/${done.body.id}`).expect(409);
       expect(res.body.code).toBe(ERROR_CODES.DAY_CHANGED);
+    });
+  });
+
+  describe('skipping', () => {
+    const skip = (itemId: string, reason = 'Knee pain this morning') => tick(itemId, { status: 'SKIPPED', reason });
+
+    it('skips the rest of an exercise for today, with a reason, and shows it everywhere', async () => {
+      const ids = await assign(0, [{ exerciseId: kneeId, times: 3 }, { exerciseId: walkId }]);
+      await tick(ids[kneeId]).expect(201);
+
+      const skipped = await skip(ids[kneeId]).expect(201);
+      expect(skipped.body).toMatchObject({ status: 'SKIPPED', reason: 'Knee pain this morning', details: null, date: today() });
+
+      const checklist = await as(patient).get('/patients/me/exercise-checklist').expect(200);
+      const knee = checklist.body.items.find((i: { itemId: string }) => i.itemId === ids[kneeId]);
+      expect(knee).toMatchObject({
+        doneCount: 1,
+        status: 'SKIPPED',
+        skip: { id: skipped.body.id, reason: 'Knee pain this morning' },
+      });
+      expect(knee.completions).toHaveLength(1);
+      expect(checklist.body).toMatchObject({ doneCount: 1, skippedCount: 2, plannedCount: 4 });
+
+      const history = await as(patient).get('/patients/me/exercise-completions').expect(200);
+      expect(history.body.data.map((c: { status: string }) => c.status)).toEqual(['SKIPPED', 'DONE']);
+
+      const compliance = await as(doctor).get(`/patients/${patient.id}/exercise-compliance`).expect(200);
+      // The plan only started today, so earlier days plan nothing.
+      expect(compliance.body).toMatchObject({ planned: 4, done: 1, skipped: 2 });
+      expect(compliance.body.byExercise).toEqual(
+        expect.arrayContaining([expect.objectContaining({ itemId: ids[kneeId], done: 1, skipped: 2 })]),
+      );
+
+      const audit = await ctx.connection.collection('auditLogs').findOne({ action: 'EXERCISE_SKIPPED' });
+      expect(audit).toMatchObject({ resourceId: skipped.body.id, after: { reason: 'Knee pain this morning' } });
+      const event = await ctx.connection.collection('exerciseOutboxEvents').findOne({ type: 'exercise.skipped' });
+      expect(event!.data).toMatchObject({ completionId: skipped.body.id, reason: 'Knee pain this morning' });
+    });
+
+    it('refuses a tick or a second skip once skipped, until the skip is undone', async () => {
+      const ids = await assign(0, [{ exerciseId: kneeId, times: 2 }]);
+      const skipped = await skip(ids[kneeId]).expect(201);
+
+      const ticked = await tick(ids[kneeId]).expect(409);
+      expect(ticked.body.code).toBe(ERROR_CODES.EXERCISE_SKIPPED);
+      await skip(ids[kneeId], 'Again').expect(409);
+
+      await as(patient).delete(`/exercise-completions/${skipped.body.id}`).expect(204);
+      const checklist = await as(patient).get('/patients/me/exercise-checklist').expect(200);
+      expect(checklist.body.items[0]).toMatchObject({ status: 'NOT_YET', skip: null });
+      await tick(ids[kneeId]).expect(201);
+    });
+
+    it('refuses to skip what is already all done', async () => {
+      const ids = await assign(0, [{ exerciseId: kneeId }]);
+      await tick(ids[kneeId]).expect(201);
+      const res = await skip(ids[kneeId]).expect(409);
+      expect(res.body.code).toBe(ERROR_CODES.EXERCISE_ALREADY_DONE);
+    });
+
+    it('needs a reason with a skip, and takes no reason or details otherwise', async () => {
+      const ids = await assign(0, [{ exerciseId: kneeId }]);
+      const noReason = await tick(ids[kneeId], { status: 'SKIPPED' }).expect(400);
+      expect(noReason.body.details[0]).toMatchObject({ field: 'reason' });
+      await tick(ids[kneeId], { status: 'SKIPPED', reason: '   ' }).expect(400);
+      await tick(ids[kneeId], { status: 'SKIPPED', reason: 'x'.repeat(501) }).expect(400);
+      await tick(ids[kneeId], { status: 'MISSED' }).expect(400);
+
+      const reasonOnTick = await tick(ids[kneeId], { reason: 'Why not' }).expect(400);
+      expect(reasonOnTick.body.details[0]).toMatchObject({ field: 'reason', code: DETAIL_CODES.NOT_ALLOWED });
+      const detailsOnSkip = await tick(ids[kneeId], { status: 'SKIPPED', reason: 'Tired', details: { note: 'x' } }).expect(400);
+      expect(detailsOnSkip.body.details[0]).toMatchObject({ field: 'details', code: DETAIL_CODES.NOT_ALLOWED });
+
+      expect(await ctx.connection.collection('exerciseCompletions').countDocuments()).toBe(0);
     });
   });
 

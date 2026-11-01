@@ -21,7 +21,7 @@ import { IdempotencyService } from '../idempotency/idempotency.service';
 import { AuthUser } from '../users/users.service';
 import { CompletionsService } from './completions.service';
 import { ComplianceService } from './compliance.service';
-import { ComplianceQueryDto, ComplianceResponse } from './compliance.dto';
+import { CaseloadQueryDto, CaseloadResponse, ComplianceQueryDto, ComplianceResponse } from './compliance.dto';
 import {
   ChecklistQueryDto,
   ChecklistResponse,
@@ -154,5 +154,29 @@ export class PatientCompletionsController {
     @Query() query: HistoryQueryDto,
   ): Promise<CompletionListResponse> {
     return this.completions.historyForDoctor(patientId, query, doctor);
+  }
+}
+
+/** A doctor's whole caseload at a glance. */
+@ApiTags('Exercise completions')
+@ApiBearerAuth()
+@ApiForbiddenResponse({ description: 'FORBIDDEN_ROLE' })
+@Roles(ROLES.DOCTOR)
+@Controller('doctor')
+export class DoctorComplianceController {
+  constructor(private readonly compliance: ComplianceService) {}
+
+  @Get('exercise-compliance')
+  @ApiOperation({
+    summary: 'How each of your patients kept to their plan, as counts (doctor)',
+    description:
+      "Planned, done and skipped over the last `days` days (7 by default, at most 90), each ending on that patient's " +
+      'own today, plus today so far and their last tick or skip. Counted the same way as the one-patient route. ' +
+      'percentage is null until the client agrees the formula.',
+  })
+  @ApiOkResponse({ type: CaseloadResponse })
+  @ApiBadRequestResponse({ description: 'VALIDATION_FAILED - days outside 1-90' })
+  caseload(@CurrentUser() doctor: AuthUser, @Query() query: CaseloadQueryDto): Promise<CaseloadResponse> {
+    return this.compliance.caseload(doctor, query);
   }
 }
