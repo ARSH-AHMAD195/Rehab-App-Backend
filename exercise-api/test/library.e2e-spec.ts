@@ -57,6 +57,12 @@ describe('Exercise library (categories and exercises)', () => {
       const gone = await ctx.createUser({ uid: 'pat-old', role: 'PATIENT', name: 'Old', active: false });
       await as(gone).get('/exercise-categories').expect(401);
     });
+
+    it('refuses a signed-in user whose email is not verified with 403, not 401, like the Auth API', async () => {
+      const unverified = await ctx.createUser({ uid: 'unverified-pat', role: 'PATIENT', name: 'New Patient' });
+      const res = await as(unverified).get('/exercise-categories').expect(403);
+      expect(res.body).toMatchObject({ statusCode: 403, code: ERROR_CODES.EMAIL_NOT_VERIFIED });
+    });
   });
 
   describe('categories', () => {
@@ -396,6 +402,14 @@ describe('Exercise library (categories and exercises)', () => {
       expect(list.body.data).toHaveLength(0);
       const inactive = await as(doctor).get('/exercises?active=false').expect(200);
       expect(inactive.body.data).toHaveLength(1);
+
+      // active=all lists both, for an admin's management screen; anything else is refused.
+      const walk = await addExercise({ name: 'Brisk walk', categoryId: await categoryId('WALKING') });
+      const all = await as(admin).get('/exercises?active=all').expect(200);
+      expect(all.body.data.map((e: { id: string }) => e.id).sort()).toEqual([exercise.id, walk.id].sort());
+      await as(admin).get('/exercises?active=yes').expect(400);
+      const unknown = await as(admin).get('/exercises?activeOnly=true').expect(400);
+      expect(unknown.body.details[0]).toMatchObject({ field: 'activeOnly' });
 
       // Its category can now be switched off; bringing it back is then refused.
       await as(admin).delete(`/exercise-categories/${exercise.categoryId}`).expect(200);

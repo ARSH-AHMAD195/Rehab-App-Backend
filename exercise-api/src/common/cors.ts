@@ -1,7 +1,16 @@
 import { CorsOptions } from '@nestjs/common/interfaces/external/cors-options.interface';
 
-/** The local Vite dev server, allowed when CORS_ORIGINS isn't set. */
-export const DEFAULT_CORS_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173','https://rehab-app-frontend-navy.vercel.app'];
+/**
+ * Allowed when CORS_ORIGINS isn't set: the deployed web app, and the local
+ * Vite dev server (5173) and `vite preview` (4173).
+ */
+export const DEFAULT_CORS_ORIGINS = [
+  'https://rehab-app-frontend-navy.vercel.app',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:4173',
+  'http://127.0.0.1:4173',
+];
 
 /**
  * Which websites may call this API from a browser. CORS_ORIGINS is a

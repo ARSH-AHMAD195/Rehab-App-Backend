@@ -84,6 +84,7 @@ Every error has the same shape:
 | 400 | `VALIDATION_FAILED` | A field is missing, the wrong shape or out of range | Show `details[]` next to the fields |
 | 401 | `UNAUTHENTICATED` | Token missing, invalid or expired, or the user is deactivated | Sign in again |
 | 403 | `FORBIDDEN_ROLE` | The user's role can't use this route | Hide the feature |
+| 403 | `EMAIL_NOT_VERIFIED` | Signed in, but the email isn't verified yet (same as the Auth API) | Show the "verify your email" screen; don't sign out |
 | 404 | `NOT_FOUND` | Not found, or a patient not linked to this doctor | Show "not found" |
 | 409 | `DAY_CHANGED` | The date sent is no longer the patient's today | Reload today's log |
 | 409 | `ALERT_ALREADY_ACKNOWLEDGED` | Someone already acknowledged this alert | Refresh the alert |

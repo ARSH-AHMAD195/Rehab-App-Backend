@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Patch } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { MeResponseDoc, ProfileResponseDoc } from '../common/response-docs';
 import { DETAIL_CODES, ROLES } from '../common/constants';
 import { ErrorDetail, ValidationFailedException } from '../common/api.exception';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -36,6 +37,7 @@ export class MeController {
     summary: 'Who am I',
     description: 'Works while the email is unverified, so the app can show the "verify your email" screen.',
   })
+  @ApiOkResponse({ type: MeResponseDoc })
   me(@CurrentUser() user: AuthUser): MeResponse {
     return {
       id: user.id,
@@ -50,6 +52,7 @@ export class MeController {
 
   @Get('users/me/profile')
   @ApiOperation({ summary: 'My basic profile' })
+  @ApiOkResponse({ type: ProfileResponseDoc })
   async profile(@CurrentUser() user: AuthUser): Promise<ProfileResponse> {
     return this.responses.profile((await this.users.model.findById(user.id).exec())!);
   }
@@ -59,6 +62,7 @@ export class MeController {
     summary: 'Update my basic profile',
     description: 'name and phone: any role. timeZone: patients. specialization: doctors.',
   })
+  @ApiOkResponse({ type: ProfileResponseDoc })
   async update(@CurrentUser() user: AuthUser, @Body() body: UpdateMyProfileDto): Promise<ProfileResponse> {
     const details: ErrorDetail[] = [];
     if (body.timeZone !== undefined && user.role !== ROLES.PATIENT) {

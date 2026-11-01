@@ -73,6 +73,15 @@ describe('Patient vitals (v1.1 /me/vitals)', () => {
       expect(res.body.code).toBe(ERROR_CODES.UNAUTHENTICATED);
     });
 
+    it('refuses a signed-in user whose email is not verified with 403, not 401, like the Auth API', async () => {
+      const unverified = await ctx.createUser({ uid: 'unverified-pat', role: 'PATIENT', name: 'New Patient', timeZone: ZONE });
+      const res = await http()
+        .get('/api/v1/vital-types')
+        .set('Authorization', `Bearer ${ctx.token(unverified)}`)
+        .expect(403);
+      expect(res.body).toMatchObject({ statusCode: 403, code: ERROR_CODES.EMAIL_NOT_VERIFIED });
+    });
+
     it('returns the request id it was given', async () => {
       const res = await asPatient('get', '/api/v1/vital-types')
         .set('X-Request-Id', 'req-abc')

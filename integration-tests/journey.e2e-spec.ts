@@ -44,12 +44,13 @@ const EVERY_DAY = [1, 2, 3, 4, 5, 6, 7];
 
 /**
  * In tests the bearer token is the Firebase uid. In production each API asks
- * Firebase to verify the real token and gets the same uid back.
+ * Firebase to verify the real token and gets the same uid back, with the
+ * account's email_verified claim, read here from Auth's fake Firebase.
  */
-const verifierThrowing = (Unauthenticated: new () => Error) => ({
+const verifierThrowing = (Unauthenticated: new () => Error, identity: FakeIdentityProvider) => ({
   async verify(idToken: string) {
     if (!idToken) throw new Unauthenticated();
-    return { uid: idToken };
+    return { uid: idToken, emailVerified: identity.accounts.get(idToken)?.emailVerified === true };
   },
 });
 
@@ -88,7 +89,7 @@ describe('Auth + Health Monitoring + Exercise APIs, one database', () => {
 
     const hmModule = await HmTest.createTestingModule({ imports: [HmAppModule] })
       .overrideProvider(HM_TOKEN_VERIFIER)
-      .useValue(verifierThrowing(HmUnauthenticated))
+      .useValue(verifierThrowing(HmUnauthenticated, identity))
       .compile();
     const h = hmModule.createNestApplication();
     h.setGlobalPrefix('api/v1');
@@ -100,7 +101,7 @@ describe('Auth + Health Monitoring + Exercise APIs, one database', () => {
 
     const exModule = await ExTest.createTestingModule({ imports: [ExAppModule] })
       .overrideProvider(EX_TOKEN_VERIFIER)
-      .useValue(verifierThrowing(ExUnauthenticated))
+      .useValue(verifierThrowing(ExUnauthenticated, identity))
       // Every video plays; the Exercise API's own tests cover what YouTube says.
       .overrideProvider(EX_VIDEO_CHECKER)
       .useValue({ check: async () => null })
@@ -156,6 +157,9 @@ describe('Auth + Health Monitoring + Exercise APIs, one database', () => {
     ).body;
 
     const [uidA, uidB, uidP] = await Promise.all([uidOf(drA.id), uidOf(drB.id), uidOf(patient.id)]);
+    // Until the patient clicks the emailed link, all three APIs refuse them with 403, not 401.
+    await hm().get('/api/v1/me/vitals/today').set('Authorization', bearer(uidP)).expect(403);
+    await ex().get('/api/v1/patients/me/exercise-checklist').set('Authorization', bearer(uidP)).expect(403);
     for (const uid of [uidA, uidB, uidP]) identity.verifyEmail(uid); // they click the emailed link
 
     // 2. HEALTH MONITORING: the same admin sets a pain limit; the patient saves today's vitals.

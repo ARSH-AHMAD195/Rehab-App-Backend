@@ -118,15 +118,18 @@ export class ExercisesService implements OnModuleInit {
   }
 
   /**
-   * The library, by name, A to Z, a page at a time. Admins and doctors see all
-   * of it; a patient passes `onlyIds` (their plan) and sees just those, active
-   * or not, since a planned exercise stays in the plan if it's switched off.
+   * The library, by name, A to Z, a page at a time. Admins and doctors see the
+   * active ones unless they ask for `active=false` or `all`; a patient passes
+   * `onlyIds` (their plan) and sees just those, active or not, since a planned
+   * exercise stays in the plan if it's switched off.
    */
   async list(query: ListExercisesQueryDto, onlyIds?: Types.ObjectId[]): Promise<ExerciseListResponse> {
     const limit = query.limit ?? DEFAULT_PAGE_LIMIT;
-    const and: FilterQuery<Exercise>[] = onlyIds
-      ? [{ _id: { $in: onlyIds } }, ...(query.active === undefined ? [] : [{ active: query.active }])]
-      : [{ active: query.active ?? true }];
+    const active = query.active ?? (onlyIds ? 'all' : 'true');
+    const and: FilterQuery<Exercise>[] = [
+      ...(onlyIds ? [{ _id: { $in: onlyIds } }] : []),
+      ...(active === 'all' ? [] : [{ active: active === 'true' }]),
+    ];
 
     if (query.category) {
       const category = await this.categories.findByCode(query.category);
@@ -142,7 +145,8 @@ export class ExercisesService implements OnModuleInit {
     }
 
     const rows = await this.model
-      .find({ $and: and })
+      // An empty $and is refused by MongoDB: active=all with no other filter.
+      .find(and.length ? { $and: and } : {})
       .sort({ sortKey: 1, _id: 1 })
       .limit(limit + 1)
       .exec();

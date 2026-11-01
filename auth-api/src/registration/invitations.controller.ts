@@ -1,5 +1,6 @@
 import { Controller, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiAcceptedResponse, ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { InvitationResponseDoc } from '../common/response-docs';
 import { InvitationStatus, ROLES } from '../common/constants';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -21,6 +22,7 @@ export class InvitationsController {
       'Admin: any user. Doctor: linked patients only (others are 404). At most 5 per user per hour. ' +
       'Also works as a password reset once a password is set.',
   })
+  @ApiAcceptedResponse({ type: InvitationResponseDoc })
   async resend(
     @CurrentUser() caller: AuthUser,
     @Param('userId') userId: string,

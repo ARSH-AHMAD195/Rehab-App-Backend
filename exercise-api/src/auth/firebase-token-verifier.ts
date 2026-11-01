@@ -23,7 +23,7 @@ export class FirebaseTokenVerifier implements TokenVerifier {
   async verify(idToken: string): Promise<VerifiedToken> {
     try {
       const decoded = await admin.auth(this.getApp()).verifyIdToken(idToken);
-      return { uid: decoded.uid };
+      return { uid: decoded.uid, emailVerified: decoded.email_verified === true };
     } catch (error) {
       this.logger.debug(`Token rejected: ${(error as Error).message}`);
       throw new UnauthenticatedException();

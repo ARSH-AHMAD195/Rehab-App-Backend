@@ -1,6 +1,8 @@
 /** What the auth guard needs out of a verified bearer token. */
 export interface VerifiedToken {
   uid: string;
+  /** The token's own email_verified claim, as the Auth API reads it. */
+  emailVerified: boolean;
 }
 
 export interface TokenVerifier {
