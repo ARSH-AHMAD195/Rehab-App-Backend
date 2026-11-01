@@ -175,9 +175,12 @@ Health Monitoring.
 | DELETE | `/exercise-categories/:categoryId` | Admin | Deactivate (refused while active exercises use it) |
 | GET | `/exercises` | All | Admin and doctor: the library, A to Z (filter by `category` code, search `q`; paged). `active=true` (default) for active ones, `false` for deactivated ones, `all` for both, as in the Auth API's lists. Any other parameter (such as `activeOnly`) is refused with 400. **Patient: only exercises in their current plan** |
 | GET | `/exercises/:exerciseId` | All | One exercise, active or not. A patient gets 404 unless it's in their plan |
-| POST | `/exercises` | Admin | Add an exercise (`name`, `categoryId`, optional `description`, `instructions`, `videoUrl`) |
-| PATCH | `/exercises/:exerciseId` | Admin | Change it, including the video; `active: true` brings it back |
+| POST | `/exercises` | Admin, doctor | Add an exercise (`name`, `categoryId`, optional `description`, `instructions`, `videoUrl`). `createdBy` records who added it |
+| PATCH | `/exercises/:exerciseId` | Admin, doctor | Change it, including the video; `active: true` brings it back (admin only). A doctor may change only the exercises they added, and may not send `active` (`403 FORBIDDEN_ROLE`) |
 | DELETE | `/exercises/:exerciseId` | Admin | Deactivate it |
+
+Every exercise carries `createdBy: { id, role }` (`ADMIN` or `DOCTOR`), or `null` for exercises
+added before this was recorded.
 
 ### Plans
 
@@ -229,18 +232,22 @@ The SRS asks for a *Daily Exercise Checklist*; the route list doesn't have one.
       "doneCount": 1,
       "status": "PARTLY_DONE",
       "completions": [ { "id": "…", "completedAt": "2026-10-20T08:15:00+05:30" } ],
+      "skip": null,
       "target": { "sets": 2, "reps": 10, "durationMin": null },
       "notes": null
     }
   ],
   "doneCount": 3,
+  "skippedCount": 0,
   "plannedCount": 5
 }
 ```
 
 - Only items planned for that day of the week are listed.
-- `status` is `NOT_YET`, `PARTLY_DONE` or `DONE`. `completions` are that day's ticks; their
-  ids are what undo takes.
+- `status` is `NOT_YET`, `PARTLY_DONE`, `DONE` or `SKIPPED`. `completions` are that day's
+  ticks; their ids are what undo takes. `skip` is `{ id, reason, skippedAt }` when the item was
+  skipped that day; its id undoes the skip. `skippedCount` adds up the planned times left
+  undone by skips.
 - `plannedCount` adds up `timesPerDay`; `doneCount` counts ticks, at most `timesPerDay` per
   item (so lowering `timesPerDay` mid-day never shows more than 100%).
 - A past day uses **the plan in place when that day ended**, so history still shows what was
@@ -251,10 +258,10 @@ The SRS asks for a *Daily Exercise Checklist*; the route list doesn't have one.
 
 | Method | Path | Who | What it does |
 |---|---|---|---|
-| POST | `/exercise-completions` | Patient | Record "I did this one" → `201` with the completion |
-| DELETE | `/exercise-completions/:completionId` | Patient | Undo one of today's ticks → `204` ⏳ *Edit and undo policy* |
-| GET | `/patients/me/exercise-completions` | Patient | My ticks, newest first (`from`, `to` default to the last 30 days; paged) |
-| GET | `/patients/:patientId/exercise-completions` | Linked doctor | A patient's ticks, the same way |
+| POST | `/exercise-completions` | Patient | Record "I did this one", or skip it with a reason → `201` with the completion |
+| DELETE | `/exercise-completions/:completionId` | Patient | Undo one of today's ticks or skips → `204` ⏳ *Edit and undo policy* |
+| GET | `/patients/me/exercise-completions` | Patient | My ticks and skips, newest first (`from`, `to` default to the last 30 days; paged) |
+| GET | `/patients/:patientId/exercise-completions` | Linked doctor | A patient's ticks and skips, the same way |
 
 **POST body**
 
@@ -262,11 +269,18 @@ The SRS asks for a *Daily Exercise Checklist*; the route list doesn't have one.
 { "itemId": "…", "date": "2026-10-20", "details": null }
 ```
 
+To skip: `{ "itemId": "…", "date": "2026-10-20", "status": "SKIPPED", "reason": "Knee pain this morning" }`.
+A skip covers the rest of that exercise for the day and doesn't count as done. `reason` (1-500
+characters) is required with `SKIPPED` and refused otherwise; `details` is for ticks only
+(`NOT_ALLOWED`). Each completion in a response and in history has `status` (`DONE` or
+`SKIPPED`) and `reason` (`null` for a tick).
+
 Checks, in order:
 1. `itemId` is in the patient's **current** plan → otherwise `409 EXERCISE_NOT_IN_PLAN`.
 2. `date` is the patient's today → otherwise `409 DAY_CHANGED` (same as Health Monitoring).
 3. The item is planned for today's day of the week → otherwise `409 EXERCISE_NOT_IN_PLAN`.
-4. Not already done `timesPerDay` times today → otherwise `409 EXERCISE_ALREADY_DONE`.
+4. Not skipped today → otherwise `409 EXERCISE_SKIPPED` (undo the skip first).
+5. Not already done `timesPerDay` times today → otherwise `409 EXERCISE_ALREADY_DONE`.
    ⏳ *Extra completions*
 
 Several taps at once can't over-count: each planned time can be filled once, enforced by the
@@ -282,6 +296,7 @@ unknown, someone else's or already-undone tick gives `404`.
 | Method | Path | Who | What it does |
 |---|---|---|---|
 | GET | `/patients/:patientId/exercise-compliance?from=&to=` | Linked doctor | How well the patient kept to the plan |
+| GET | `/doctor/exercise-compliance?days=` | Doctor | The same totals for every patient linked to you |
 
 ```json
 {
@@ -289,14 +304,16 @@ unknown, someone else's or already-undone tick gives `404`.
   "to": "2026-10-20",
   "planned": 35,
   "done": 28,
+  "skipped": 2,
   "percentage": null,
-  "byDay": [ { "date": "2026-10-20", "planned": 5, "done": 4 } ],
-  "byExercise": [ { "itemId": "…", "exerciseId": "…", "name": "Seated knee extension", "planned": 7, "done": 7 } ]
+  "byDay": [ { "date": "2026-10-20", "planned": 5, "done": 4, "skipped": 1 } ],
+  "byExercise": [ { "itemId": "…", "exerciseId": "…", "name": "Seated knee extension", "planned": 7, "done": 7, "skipped": 0 } ]
 }
 ```
 
-- `planned` and `done` are counts. `percentage` stays `null` until the client agrees the
+- `planned`, `done` and `skipped` are counts. `percentage` stays `null` until the client agrees the
   formula. ⏳ *Compliance formula*
+- A skip counts the planned times that day left undone.
 - Each day is counted against the plan in place when that day ended, the same rule as the
   checklist, so the two always agree. Days before the first plan count as nothing planned.
 - A tick counts at most `timesPerDay` times per item per day; undone ticks don't count.
@@ -304,6 +321,27 @@ unknown, someone else's or already-undone tick gives `404`.
   today, and the range is at most 90 days (`OUT_OF_RANGE`). Today is included even though
   it isn't over yet.
 - Audited as `EXERCISE_PLAN_VIEWED`.
+
+**Caseload** (`/doctor/exercise-compliance`): one row per active linked patient, by name.
+`days` is 1-90 (default 7), each patient's range ending on their own today.
+
+```json
+{
+  "days": 7,
+  "data": [
+    {
+      "patient": { "id": "…", "name": "Rajesh Iyer" },
+      "from": "2026-10-14", "to": "2026-10-20",
+      "planned": 35, "done": 28, "skipped": 2, "percentage": null,
+      "today": { "planned": 5, "done": 4, "skipped": 1 },
+      "lastActivityAt": "2026-10-20T08:15:00+05:30"
+    }
+  ]
+}
+```
+
+`lastActivityAt` is the patient's last tick or skip ever (`null` if none). Each patient shown
+is audited as `EXERCISE_PLAN_VIEWED`.
 
 ---
 
@@ -315,7 +353,8 @@ Same format and codes as Health Monitoring, plus:
 |---|---|---|
 | 403 | `EMAIL_NOT_VERIFIED` | Signed in, but the email isn't verified yet. Same as the Auth API and Health Monitoring |
 | 409 | `EXERCISE_NOT_IN_PLAN` | A completion for an item that isn't in the patient's current plan, or isn't planned for today |
-| 409 | `EXERCISE_ALREADY_DONE` | Already done the planned number of times today |
+| 409 | `EXERCISE_ALREADY_DONE` | Already done the planned number of times today (also when skipping one that's all done) |
+| 409 | `EXERCISE_SKIPPED` | Ticking or skipping an exercise already skipped today; undo the skip first |
 | 409 | `DAY_CHANGED` | A completion whose `date` isn't the patient's today, or undoing an earlier day's tick |
 | 409 / 422 | `IDEMPOTENCY_KEY_IN_USE` / `IDEMPOTENCY_KEY_REUSED` | Same as Health Monitoring |
 | 413 | `PAYLOAD_TOO_LARGE` | The request body is over 32 KB |
@@ -333,9 +372,10 @@ Same format and codes as Health Monitoring, plus:
 |---|---|
 | `EXERCISE_PLAN_CHANGED` | A doctor assigns or changes a plan (old and new plan recorded) |
 | `EXERCISE_PLAN_VIEWED` | A doctor views a patient's plan, checklist, history or compliance |
-| `EXERCISE_LIBRARY_CHANGED` | An admin adds, changes or deactivates an exercise or category |
+| `EXERCISE_LIBRARY_CHANGED` | An admin or doctor adds or changes an exercise, or an admin changes a category |
 | `EXERCISE_COMPLETION_RECORDED` | A patient ticks an exercise off *(added: patient data changes are audited, as in Health Monitoring)* |
-| `EXERCISE_COMPLETION_UNDONE` | A patient undoes a tick *(added)* |
+| `EXERCISE_SKIPPED` | A patient skips an exercise for the day, with the reason *(added)* |
+| `EXERCISE_COMPLETION_UNDONE` | A patient undoes a tick or a skip *(added)* |
 
 ---
 
@@ -348,7 +388,8 @@ analytics modules to use later:
 |---|---|
 | `exercise.plan.assigned` | A plan is assigned or changed. Lets the patient be told |
 | `exercise.completed` | A patient ticks an exercise off. Feeds the patient timeline |
-| `exercise.completion.undone` | A patient undoes a tick, so the timeline can take it back *(added)* |
+| `exercise.skipped` | A patient skips an exercise for the day; `data` carries the `reason` *(added)* |
+| `exercise.completion.undone` | A patient undoes a tick or a skip, so the timeline can take it back *(added)* |
 
 Delivery has the same open item as Health Monitoring: where events go is not decided yet.
 

@@ -123,7 +123,7 @@ export class MedicalProfilesService {
   /** Calendar checks the DTO can't do: real dates, a birth date in the past, age 0-120. */
   private assertDates(dto: UpdateMedicalProfileDto): void {
     const details: ErrorDetail[] = [];
-    for (const field of ['dateOfBirth', 'plannedSurgeryDate'] as const) {
+    for (const field of ['dateOfBirth', 'plannedSurgeryDate', 'programmeStartDate'] as const) {
       const value = dto[field];
       if (value && !DateTime.fromISO(value).isValid) {
         details.push({ field, code: DETAIL_CODES.WRONG_SHAPE, issue: 'is not a real calendar date' });

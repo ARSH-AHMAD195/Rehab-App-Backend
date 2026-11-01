@@ -1,8 +1,8 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, FilterQuery, Model, Types } from 'mongoose';
-import { AUDIT_ACTIONS, DEFAULT_PAGE_LIMIT, DETAIL_CODES, VIDEO_PROVIDERS } from '../common/constants';
-import { NotFoundException, ValidationFailedException } from '../common/api.exception';
+import { AUDIT_ACTIONS, DEFAULT_PAGE_LIMIT, DETAIL_CODES, ROLES, VIDEO_PROVIDERS } from '../common/constants';
+import { ForbiddenRoleException, NotFoundException, ValidationFailedException } from '../common/api.exception';
 import { TransactionRunner } from '../common/mongo/transaction.runner';
 import { decodeCursor, encodeCursor } from '../common/pagination/cursor';
 import { AuditService } from '../audit/audit.service';
@@ -20,7 +20,7 @@ import { parseYouTubeVideoId, youTubeWatchUrl } from './youtube';
 import { VIDEO_CHECKER, VIDEO_PROBLEM_ISSUES, VideoChecker } from './video-checker';
 import { ExercisePlan } from '../plans/plan.schema';
 
-/** The fields an admin edit can change, as stored. */
+/** The fields an edit can change, as stored. */
 type ExerciseChanges = Partial<Pick<Exercise, 'name' | 'sortKey' | 'categoryId' | 'description' | 'instructions' | 'video' | 'active'>>;
 
 @Injectable()
@@ -53,6 +53,7 @@ export class ExercisesService implements OnModuleInit {
             description: dto.description || null,
             instructions: dto.instructions ?? [],
             video,
+            createdBy: { id: new Types.ObjectId(actor.id), role: actor.role },
           },
         ],
         { session },
@@ -64,8 +65,22 @@ export class ExercisesService implements OnModuleInit {
     return created;
   }
 
-  /** PATCH. Also how a deactivated exercise is brought back (active: true). */
+  /**
+   * PATCH. Also how a deactivated exercise is brought back (active: true).
+   * A doctor may edit only the exercises they added, and may not switch one
+   * on or off: that stays with the admin.
+   */
   async update(id: string, dto: UpdateExerciseDto, actor: AuthUser): Promise<ExerciseResponse> {
+    const isDoctor = actor.role === ROLES.DOCTOR;
+    if (isDoctor && dto.active !== undefined) {
+      throw new ForbiddenRoleException('Only an admin can switch an exercise on or off');
+    }
+    // Checked before the video, so a doctor isn't told about someone else's link.
+    if (isDoctor) {
+      const existing = Types.ObjectId.isValid(id) ? await this.model.findById(id, { createdBy: 1 }).lean() : null;
+      if (!existing) throw new NotFoundException('Exercise not found');
+      this.assertOwnedBy(existing.createdBy, actor);
+    }
     const changes = this.toChanges(dto);
     // Asked even when the link is unchanged: a video that has since gone
     // Private should be noticed, not saved over again.
@@ -73,6 +88,7 @@ export class ExercisesService implements OnModuleInit {
 
     return this.tx.run(async (session) => {
       const before = await this.findOrThrow(id, session);
+      if (isDoctor) this.assertOwnedBy(before.createdBy, actor);
       const beforeResponse = await this.respond(before);
 
       const changed = (Object.keys(changes) as (keyof ExerciseChanges)[]).filter(
@@ -205,6 +221,12 @@ export class ExercisesService implements OnModuleInit {
     ]);
   }
 
+  private assertOwnedBy(createdBy: Exercise['createdBy'], doctor: AuthUser): void {
+    if (String(createdBy?.id) !== doctor.id) {
+      throw new ForbiddenRoleException('Doctors can change only the exercises they added');
+    }
+  }
+
   private async findOrThrow(id: string, session: ClientSession): Promise<ExerciseDocument> {
     const doc = Types.ObjectId.isValid(id) ? await this.model.findById(id).session(session).exec() : null;
     if (!doc) throw new NotFoundException('Exercise not found');
@@ -232,6 +254,7 @@ export class ExercisesService implements OnModuleInit {
         ? { provider: doc.video.provider, videoId: doc.video.videoId, url: youTubeWatchUrl(doc.video.videoId) }
         : null,
       active: doc.active,
+      createdBy: doc.createdBy ? { id: String(doc.createdBy.id), role: doc.createdBy.role } : null,
       createdAt: doc.createdAt.toISOString(),
       updatedAt: doc.updatedAt.toISOString(),
     };

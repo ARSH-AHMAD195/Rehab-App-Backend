@@ -80,6 +80,12 @@ export class ExerciseAlreadyDoneException extends ApiException {
   }
 }
 
+export class ExerciseSkippedException extends ApiException {
+  constructor() {
+    super(HttpStatus.CONFLICT, ERROR_CODES.EXERCISE_SKIPPED, 'You skipped this exercise today. Undo the skip first.');
+  }
+}
+
 /** An earlier request with this Idempotency-Key hasn't finished; retry shortly to get its answer. */
 export class IdempotencyKeyInUseException extends ApiException {
   constructor() {

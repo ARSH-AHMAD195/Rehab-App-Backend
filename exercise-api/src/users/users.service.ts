@@ -57,6 +57,15 @@ export class UsersService {
     return patient ? this.toAuthUser(patient as UserDocument) : null;
   }
 
+  /** A doctor's caseload: the active patients linked to them, by name. */
+  async patientsOf(doctorId: string): Promise<AuthUser[]> {
+    const patients = await this.users
+      .find({ role: ROLES.PATIENT, active: true, doctorIds: new Types.ObjectId(doctorId) })
+      .sort({ name: 1, _id: 1 })
+      .lean();
+    return patients.map((patient) => this.toAuthUser(patient as UserDocument));
+  }
+
   private toAuthUser(user: UserDocument): AuthUser {
     return {
       id: String(user._id),

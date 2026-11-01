@@ -32,7 +32,9 @@ export class MedicalProfile {
   @Prop({ type: [String], default: null }) medications!: string[] | null;
   @Prop({ type: String, default: null }) smokingStatus!: string | null;
   @Prop({ type: Object, default: null }) emergencyContact!: EmergencyContact | null;
-
+  /** The prehab programme: the day it starts and how many days it runs. */
+  @Prop({ type: String, default: null }) programmeStartDate!: string | null;
+  @Prop({ type: Number, default: null }) programmeLengthDays!: number | null;
 
   /** Optimistic concurrency: PATCH sends the version it read. */
   @Prop({ required: true, default: 1 })
@@ -70,6 +72,8 @@ const FIELD_SET: Record<
   medications: true,
   smokingStatus: true,
   emergencyContact: true,
+  programmeStartDate: true,
+  programmeLengthDays: true,
 };
 export type MedicalField = keyof typeof FIELD_SET;
 export const MEDICAL_FIELDS = Object.keys(FIELD_SET) as MedicalField[];

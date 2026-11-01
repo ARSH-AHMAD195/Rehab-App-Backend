@@ -1,5 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
+import { COMPLETION_STATUS, CompletionStatus } from '../common/constants';
+
+/** The slot a skip takes: one skip per item per day, apart from the ticks' slots 0, 1, ... */
+export const SKIP_SLOT = -1;
 
 /** ⏳ What the patient records: optional until the client decides. */
 @Schema({ _id: false })
@@ -10,7 +14,8 @@ export class CompletionDetails {
 const CompletionDetailsSchema = SchemaFactory.createForClass(CompletionDetails);
 
 /**
- * One "done" tick: the patient did one planned exercise once.
+ * One "done" tick: the patient did one planned exercise once. Or, with status
+ * SKIPPED, the patient skipped the rest of that exercise for the day, and why.
  *
  * Linked to the plan item (and the exercise and plan version behind it), so
  * every completion belongs to the right patient and the right assigned
@@ -37,11 +42,19 @@ export class ExerciseCompletion {
   /**
    * Which of the day's planned times this is: 0 to timesPerDay - 1. The unique
    * index below lets each slot be filled once, so two taps at the same moment
-   * can't both count as the last planned time.
+   * can't both count as the last planned time. A skip takes SKIP_SLOT.
    */
   @Prop({ required: true })
   slot!: number;
 
+  /** Rows saved before skipping existed have no status: they are ticks. */
+  @Prop({ type: String, enum: Object.values(COMPLETION_STATUS), default: COMPLETION_STATUS.DONE })
+  status!: CompletionStatus;
+
+  @Prop({ type: String, default: null })
+  skipReason!: string | null;
+
+  /** When it was ticked, or skipped. */
   @Prop({ required: true })
   completedAt!: Date;
 

@@ -132,6 +132,18 @@ export class UpdateMedicalProfileDto {
   @ValidateNested()
   @Type(() => EmergencyContactDto)
   emergencyContact?: EmergencyContactDto | null;
+
+  @ApiPropertyOptional({ example: '2026-10-23', nullable: true, description: 'The day the prehab programme starts' })
+  @IsOptional()
+  @Matches(DATE, { message: DATE_ISSUE })
+  programmeStartDate?: string | null;
+
+  @ApiPropertyOptional({ example: 28, nullable: true, description: 'How many days the programme runs, 1-365' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  programmeLengthDays?: number | null;
 }
 
 // Compile-time only: the DTO's fields (besides version) are exactly the schema's MEDICAL_FIELDS.

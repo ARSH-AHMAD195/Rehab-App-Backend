@@ -53,26 +53,30 @@ export class ExercisesController {
   }
 
   @Post()
-  @Roles(ROLES.ADMIN)
-  @ApiOperation({ summary: 'Add an exercise (admin)' })
+  @Roles(ROLES.ADMIN, ROLES.DOCTOR)
+  @ApiOperation({ summary: 'Add an exercise (admin, doctor)', description: 'createdBy records who added it.' })
   @ApiCreatedResponse({ type: ExerciseResponse })
   @ApiBadRequestResponse({ description: 'VALIDATION_FAILED - e.g. an unknown or deactivated category, or a link that is not YouTube' })
-  create(@CurrentUser() admin: AuthUser, @Body() body: CreateExerciseDto): Promise<ExerciseResponse> {
-    return this.exercises.create(body, admin);
+  create(@CurrentUser() caller: AuthUser, @Body() body: CreateExerciseDto): Promise<ExerciseResponse> {
+    return this.exercises.create(body, caller);
   }
 
   @Patch(':exerciseId')
-  @Roles(ROLES.ADMIN)
-  @ApiOperation({ summary: 'Change an exercise, including its video (admin)' })
+  @Roles(ROLES.ADMIN, ROLES.DOCTOR)
+  @ApiOperation({
+    summary: 'Change an exercise, including its video (admin, doctor)',
+    description: 'A doctor may change only the exercises they added, and may not send `active`.',
+  })
   @ApiOkResponse({ type: ExerciseResponse })
   @ApiBadRequestResponse({ description: 'VALIDATION_FAILED' })
+  @ApiForbiddenResponse({ description: "FORBIDDEN_ROLE - also a doctor changing someone else's exercise, or sending `active`" })
   @ApiNotFoundResponse({ description: 'NOT_FOUND' })
   update(
-    @CurrentUser() admin: AuthUser,
+    @CurrentUser() caller: AuthUser,
     @Param('exerciseId') id: string,
     @Body() body: UpdateExerciseDto,
   ): Promise<ExerciseResponse> {
-    return this.exercises.update(id, body, admin);
+    return this.exercises.update(id, body, caller);
   }
 
   @Delete(':exerciseId')

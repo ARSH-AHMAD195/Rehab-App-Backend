@@ -126,6 +126,8 @@ export class MedicalProfileResponseDoc {
   @ApiProperty({ type: [String], nullable: true, example: ['Metformin 500 mg twice daily'] }) medications!: string[] | null;
   @ApiProperty({ enum: SMOKING_STATUSES, nullable: true }) smokingStatus!: string | null;
   @ApiProperty({ type: EmergencyContactDoc, nullable: true }) emergencyContact!: EmergencyContactDoc | null;
+  @ApiProperty({ type: String, nullable: true, example: '2026-10-23' }) programmeStartDate!: string | null;
+  @ApiProperty({ type: Number, nullable: true, example: 28 }) programmeLengthDays!: number | null;
   @ApiProperty({ example: 1, description: '0 until first saved; send it back with your next PATCH' }) version!: number;
   @ApiProperty({ type: String, nullable: true, example: TIME }) updatedAt!: string | null;
   @ApiProperty({ type: UpdatedByDoc, nullable: true }) updatedBy!: UpdatedByDoc | null;

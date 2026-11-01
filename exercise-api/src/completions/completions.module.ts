@@ -6,7 +6,7 @@ import { IdempotencyModule } from '../idempotency/idempotency.module';
 import { ExerciseCompletion, ExerciseCompletionSchema } from './completion.schema';
 import { CompletionsService } from './completions.service';
 import { ComplianceService } from './compliance.service';
-import { CompletionsController, PatientCompletionsController } from './completions.controller';
+import { CompletionsController, DoctorComplianceController, PatientCompletionsController } from './completions.controller';
 
 @Module({
   imports: [
@@ -15,7 +15,7 @@ import { CompletionsController, PatientCompletionsController } from './completio
     PlansModule,
     IdempotencyModule,
   ],
-  controllers: [CompletionsController, PatientCompletionsController],
+  controllers: [CompletionsController, PatientCompletionsController, DoctorComplianceController],
   providers: [CompletionsService, ComplianceService],
   exports: [CompletionsService],
 })

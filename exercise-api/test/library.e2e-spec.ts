@@ -285,8 +285,9 @@ describe('Exercise library (categories and exercises)', () => {
         .expect(400);
     });
 
-    it('keeps the library away from patients without a plan, and edits away from doctors', async () => {
+    it("keeps the library away from patients without a plan, and the admin's exercises away from doctors", async () => {
       const exercise = await addExercise();
+      expect(exercise.createdBy).toEqual({ id: admin.id, role: 'ADMIN' });
 
       // Patients only see exercises in their own plan; this one has none.
       const list = await as(patient).get('/exercises').expect(200);
@@ -297,9 +298,37 @@ describe('Exercise library (categories and exercises)', () => {
 
       await as(doctor).get('/exercises').expect(200);
       await as(doctor).get(`/exercises/${exercise.id}`).expect(200);
-      await as(doctor).post('/exercises').send({ name: 'X', categoryId: exercise.categoryId }).expect(403);
-      await as(doctor).patch(`/exercises/${exercise.id}`).send({ name: 'Y' }).expect(403);
+      const notTheirs = await as(doctor).patch(`/exercises/${exercise.id}`).send({ name: 'Y' }).expect(403);
+      expect(notTheirs.body).toMatchObject({ code: ERROR_CODES.FORBIDDEN_ROLE, message: expect.stringMatching(/only the exercises they added/) });
       await as(doctor).delete(`/exercises/${exercise.id}`).expect(403);
+      await as(doctor).patch('/exercises/6712a0b1c2d3e4f5a6b7c8d9').send({ name: 'Y' }).expect(404);
+    });
+
+    it('a doctor adds an exercise and edits their own, but cannot switch it off', async () => {
+      const added = await as(doctor)
+        .post('/exercises')
+        .send({ name: 'Diaphragmatic breathing', categoryId: await categoryId('BREATHING') })
+        .expect(201);
+      expect(added.body).toMatchObject({ active: true, createdBy: { id: doctor.id, role: 'DOCTOR' } });
+
+      const edited = await as(doctor)
+        .patch(`/exercises/${added.body.id}`)
+        .send({ instructions: ['Breathe in through the nose'], videoUrl: VIDEO_ID })
+        .expect(200);
+      expect(edited.body).toMatchObject({ instructions: ['Breathe in through the nose'], createdBy: { id: doctor.id } });
+
+      const off = await as(doctor).patch(`/exercises/${added.body.id}`).send({ active: false }).expect(403);
+      expect(off.body.message).toMatch(/Only an admin/);
+      await as(doctor).delete(`/exercises/${added.body.id}`).expect(403);
+
+      // Another doctor can't change it; the admin can.
+      const other = await ctx.createUser({ uid: 'doc-2', role: 'DOCTOR', name: 'Dr Other' });
+      await as(other).patch(`/exercises/${added.body.id}`).send({ name: 'Mine now' }).expect(403);
+      await as(admin).patch(`/exercises/${added.body.id}`).send({ name: 'Belly breathing' }).expect(200);
+      await as(admin).delete(`/exercises/${added.body.id}`).expect(200);
+
+      const audit = await ctx.connection.collection('auditLogs').findOne({ resourceId: added.body.id, before: null });
+      expect(audit).toMatchObject({ actorRole: 'DOCTOR', after: { exercise: { createdBy: { id: doctor.id } } } });
     });
 
     it('404s an unknown id and a malformed one', async () => {

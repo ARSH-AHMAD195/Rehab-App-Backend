@@ -69,7 +69,7 @@ export class UpdateExerciseDto extends ExerciseFieldsDto {
   @IsMongoId()
   categoryId?: string;
 
-  @ApiPropertyOptional({ description: 'false deactivates; true brings it back (its category must be active).' })
+  @ApiPropertyOptional({ description: 'Admin only. false deactivates; true brings it back (its category must be active).' })
   @ValidateIf((_, value) => value !== undefined)
   @IsBoolean()
   active?: boolean;
@@ -106,6 +106,11 @@ export class VideoResponse {
   @ApiProperty({ example: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }) url!: string;
 }
 
+export class CreatedByResponse {
+  @ApiProperty() id!: string;
+  @ApiProperty({ example: 'DOCTOR', enum: ['ADMIN', 'DOCTOR'] }) role!: string;
+}
+
 export class ExerciseResponse {
   @ApiProperty() id!: string;
   @ApiProperty({ example: 'Seated knee extension' }) name!: string;
@@ -115,6 +120,8 @@ export class ExerciseResponse {
   @ApiProperty({ type: [String] }) instructions!: string[];
   @ApiProperty({ type: VideoResponse, nullable: true }) video!: VideoResponse | null;
   @ApiProperty() active!: boolean;
+  @ApiProperty({ type: CreatedByResponse, nullable: true, description: 'null for exercises added before this was recorded' })
+  createdBy!: CreatedByResponse | null;
   @ApiProperty() createdAt!: string;
   @ApiProperty() updatedAt!: string;
 }

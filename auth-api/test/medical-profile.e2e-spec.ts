@@ -90,6 +90,18 @@ describe('Medical profile', () => {
     expect(edit.body).toMatchObject({ version: 2, updatedBy: { id: doctor.id, role: 'DOCTOR' } });
   });
 
+  it('a doctor sets the programme dates; they come back on the next read', async () => {
+    const edit = await api()
+      .patch(theirs())
+      .set('Authorization', t.auth(doctor))
+      .send({ version: 0, programmeStartDate: '2026-10-23', programmeLengthDays: 28 })
+      .expect(200);
+    expect(edit.body).toMatchObject({ version: 1, programmeStartDate: '2026-10-23', programmeLengthDays: 28 });
+
+    const read = await api().get(mine).set('Authorization', t.auth(patient)).expect(200);
+    expect(read.body).toMatchObject({ programmeStartDate: '2026-10-23', programmeLengthDays: 28 });
+  });
+
   it('an unlinked doctor gets 404; an admin and the patient get 403 on the doctor route', async () => {
     await api().get(theirs()).set('Authorization', t.auth(otherDoctor)).expect(404);
     await api().patch(theirs()).set('Authorization', t.auth(otherDoctor)).send({ version: 0, sex: 'MALE' }).expect(404);
@@ -126,6 +138,10 @@ describe('Medical profile', () => {
       ['bad emergency phone', { version: 0, emergencyContact: { name: 'S', relation: 'Wife', phone: '123' } }],
       ['unknown field', { version: 0, weightKg: 70 }],
       ['diagnosis too long', { version: 0, diagnosis: 'x'.repeat(501) }],
+      ['impossible programme start', { version: 0, programmeStartDate: '2026-02-30' }],
+      ['programme of 0 days', { version: 0, programmeLengthDays: 0 }],
+      ['programme over a year', { version: 0, programmeLengthDays: 366 }],
+      ['programme length not whole', { version: 0, programmeLengthDays: 7.5 }],
     ];
 
     it.each(bad)('400 for %s', async (_label, body) => {

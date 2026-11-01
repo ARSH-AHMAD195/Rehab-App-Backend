@@ -110,17 +110,17 @@ describe('Exercise compliance', () => {
 
     expect(res.body).toMatchObject({ from: daysAgo(6), to: daysAgo(0), planned: 14, done: 8, percentage: null });
     expect(res.body.byDay).toEqual([
-      { date: daysAgo(6), planned: 2, done: 2 },
-      { date: daysAgo(5), planned: 2, done: 2 },
-      { date: daysAgo(4), planned: 2, done: 0 },
-      { date: daysAgo(3), planned: 2, done: 2 },
-      { date: daysAgo(2), planned: 2, done: 1 },
-      { date: daysAgo(1), planned: 2, done: 0 },
-      { date: daysAgo(0), planned: 2, done: 1 },
+      { date: daysAgo(6), planned: 2, done: 2, skipped: 0 },
+      { date: daysAgo(5), planned: 2, done: 2, skipped: 0 },
+      { date: daysAgo(4), planned: 2, done: 0, skipped: 0 },
+      { date: daysAgo(3), planned: 2, done: 2, skipped: 0 },
+      { date: daysAgo(2), planned: 2, done: 1, skipped: 0 },
+      { date: daysAgo(1), planned: 2, done: 0, skipped: 0 },
+      { date: daysAgo(0), planned: 2, done: 1, skipped: 0 },
     ]);
     expect(res.body.byExercise).toEqual([
-      { itemId: knee, exerciseId: kneeId, name: 'Seated knee extension', planned: 10, done: 6 },
-      { itemId: walk, exerciseId: walkId, name: 'Brisk walk', planned: 4, done: 2 },
+      { itemId: knee, exerciseId: kneeId, name: 'Seated knee extension', planned: 10, done: 6, skipped: 0 },
+      { itemId: walk, exerciseId: walkId, name: 'Brisk walk', planned: 4, done: 2, skipped: 0 },
     ]);
   });
 
@@ -161,5 +161,70 @@ describe('Exercise compliance', () => {
     await as(otherDoctor).get(compliancePath()).expect(404);
     await as(patient).get(compliancePath()).expect(403);
     await as(admin).get(compliancePath()).expect(403);
+  });
+
+  describe("a doctor's caseload", () => {
+    it('sums each linked patient the same way as the one-patient route, with today and last activity', async () => {
+      const ids = await planFrom(10, 0, [{ exerciseId: kneeId, times: 2 }]);
+      const knee = ids[kneeId];
+      await pastTicks(daysAgo(6), knee, kneeId, 2);
+      await pastTicks(daysAgo(20), knee, kneeId, 1); // outside the 7 days, but still activity
+      await as(patient).post('/exercise-completions').send({ itemId: knee, date: daysAgo(0) }).expect(201);
+      await as(patient)
+        .post('/exercise-completions')
+        .send({ itemId: knee, date: daysAgo(0), status: 'SKIPPED', reason: 'Tired' })
+        .expect(201);
+
+      // Linked with no plan, linked but deactivated, and someone else's patient.
+      const anita = await ctx.createUser({ uid: 'pat-2', role: 'PATIENT', name: 'Anita Shah', timeZone: ZONE, doctorIds: [doctor.id] });
+      await ctx.createUser({ uid: 'pat-3', role: 'PATIENT', name: 'Gone', active: false, doctorIds: [doctor.id] });
+      await ctx.createUser({ uid: 'pat-4', role: 'PATIENT', name: 'Not Mine', doctorIds: [otherDoctor.id] });
+
+      const res = await as(doctor).get('/doctor/exercise-compliance').expect(200);
+      const one = await as(doctor).get(compliancePath()).expect(200);
+
+      expect(res.body.days).toBe(7);
+      expect(res.body.data.map((row: { patient: { name: string } }) => row.patient.name)).toEqual(['Anita Shah', 'Rajesh Iyer']);
+      const [anitaRow, rajeshRow] = res.body.data;
+      expect(rajeshRow).toEqual({
+        patient: { id: patient.id, name: 'Rajesh Iyer' },
+        from: daysAgo(6),
+        to: daysAgo(0),
+        planned: one.body.planned,
+        done: one.body.done,
+        skipped: one.body.skipped,
+        percentage: null,
+        today: { planned: 2, done: 1, skipped: 1 },
+        lastActivityAt: expect.stringMatching(/\+05:30$/),
+      });
+      expect(rajeshRow).toMatchObject({ planned: 14, done: 3, skipped: 1 });
+      expect(anitaRow).toMatchObject({
+        patient: { id: anita.id },
+        planned: 0,
+        done: 0,
+        skipped: 0,
+        today: { planned: 0, done: 0, skipped: 0 },
+        lastActivityAt: null,
+      });
+
+      // One view recorded per patient shown (plus the one-patient read above).
+      const views = await ctx.connection.collection('auditLogs').find({ action: 'EXERCISE_PLAN_VIEWED' }).toArray();
+      expect(views.map((v) => String(v.patientId)).sort()).toEqual([anita.id, patient.id, patient.id].sort());
+    });
+
+    it('takes days from 1 to 90, and is for doctors only', async () => {
+      const res = await as(doctor).get('/doctor/exercise-compliance?days=1').expect(200);
+      expect(res.body.data[0]).toMatchObject({ from: daysAgo(0), to: daysAgo(0) });
+      await as(doctor).get('/doctor/exercise-compliance?days=90').expect(200);
+      await as(doctor).get('/doctor/exercise-compliance?days=0').expect(400);
+      await as(doctor).get('/doctor/exercise-compliance?days=91').expect(400);
+      await as(doctor).get('/doctor/exercise-compliance?from=2026-01-01').expect(400);
+
+      await as(patient).get('/doctor/exercise-compliance').expect(403);
+      await as(admin).get('/doctor/exercise-compliance').expect(403);
+
+      const none = await as(otherDoctor).get('/doctor/exercise-compliance').expect(200);
+      expect(none.body).toEqual({ days: 7, data: [] });
+    });
   });
 });
