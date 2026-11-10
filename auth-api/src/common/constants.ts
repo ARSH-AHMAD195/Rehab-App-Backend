@@ -79,3 +79,13 @@ export const INVITATIONS_PER_HOUR = 5;
 export const SEXES = ['MALE', 'FEMALE', 'OTHER', 'UNDISCLOSED'] as const;
 export const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'UNKNOWN'] as const;
 export const SMOKING_STATUSES = ['NEVER', 'FORMER', 'CURRENT'] as const;
+
+/**
+ * Onboarding "other conditions" checkboxes, as the client's change request
+ * lists them: hypertension, diabetes, chronic kidney disease, ischaemic heart
+ * disease, smoking, other. OTHER's details go in otherConditions.
+ */
+export const CONDITIONS = ['HTN', 'DM', 'CKD', 'IHD', 'SMOKING', 'OTHER'] as const;
+
+/** Onboarding weight, kg: the same data-entry limits as the daily weight vital. */
+export const WEIGHT_KG_RANGE = { min: 20, max: 250 } as const;

@@ -111,6 +111,17 @@ the API, so `GET /patients` can show it without one Firebase call per row.
 They are listed in the reference and need clinical confirmation. They live in
 `src/medical-profiles/medical-profile.schema.ts` and `medical-profile.dto.ts`.
 
+The doctor onboarding fields from the client's November 2026 change request are there too:
+`onboardingWeightKg`, `chemotherapy`, `radiotherapy`, `lastChemoDate`, `chemoSchedule`, `anaemia`,
+`conditions` (checkboxes: `HTN`, `DM`, `CKD`, `IHD`, `SMOKING`, `OTHER`) and `otherConditions`.
+Hb, albumin and the nutrition score are not here yet: they arrive with investigations and triage.
+
+The API also returns three read-only values, worked out on every read so they never go stale
+(`src/medical-profiles/derived.ts`): `age` (from `dateOfBirth`), `bmi` (from `onboardingWeightKg`
+and `heightCm`, 1 decimal) and `daysToSurgery` (from `plannedSurgeryDate`, in the patient's own
+time zone; negative once surgery has passed). `GET /patients` shows each patient's
+`plannedSurgeryDate` and `daysToSurgery`.
+
 ### 5. Health Monitoring compatibility
 `users` keeps every field Health Monitoring reads (`firebaseUid`, `role`, `name`, `timeZone`,
 `doctorIds`, `active`) with the same meaning. Once both modules are merged, Health Monitoring's

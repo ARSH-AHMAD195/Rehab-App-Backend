@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { BLOOD_GROUPS, INVITATION_STATUS, ROLES, SEXES, SMOKING_STATUSES } from './constants';
+import { BLOOD_GROUPS, CONDITIONS, INVITATION_STATUS, ROLES, SEXES, SMOKING_STATUSES } from './constants';
 import { AdminResponse, DoctorResponse, PatientResponse, ProfileResponse } from '../users/user.responses';
 import { MedicalProfileResponse } from '../medical-profiles/medical-profiles.service';
 
@@ -48,6 +48,8 @@ export class PatientResponseDoc {
   @ApiProperty() active!: boolean;
   @ApiProperty() emailVerified!: boolean;
   @ApiProperty({ type: [DoctorRefDoc] }) doctors!: DoctorRefDoc[];
+  @ApiProperty({ type: String, nullable: true, example: '2026-11-20', description: 'From the medical profile' }) plannedSurgeryDate!: string | null;
+  @ApiProperty({ type: Number, nullable: true, example: 10, description: "Days from the patient's today; 0 on the day, negative after" }) daysToSurgery!: number | null;
   @ApiProperty({ type: String, nullable: true, example: TIME }) createdAt!: string | null;
 }
 
@@ -128,6 +130,17 @@ export class MedicalProfileResponseDoc {
   @ApiProperty({ type: EmergencyContactDoc, nullable: true }) emergencyContact!: EmergencyContactDoc | null;
   @ApiProperty({ type: String, nullable: true, example: '2026-10-23' }) programmeStartDate!: string | null;
   @ApiProperty({ type: Number, nullable: true, example: 28 }) programmeLengthDays!: number | null;
+  @ApiProperty({ type: Number, nullable: true, example: 68.5, description: 'Weight at onboarding, kg' }) onboardingWeightKg!: number | null;
+  @ApiProperty({ type: Boolean, nullable: true, example: true }) chemotherapy!: boolean | null;
+  @ApiProperty({ type: Boolean, nullable: true, example: false }) radiotherapy!: boolean | null;
+  @ApiProperty({ type: String, nullable: true, example: '2026-10-02' }) lastChemoDate!: string | null;
+  @ApiProperty({ type: String, nullable: true, example: 'FOLFOX, every 2 weeks, 6 cycles' }) chemoSchedule!: string | null;
+  @ApiProperty({ type: Boolean, nullable: true, example: false }) anaemia!: boolean | null;
+  @ApiProperty({ enum: CONDITIONS, isArray: true, nullable: true, example: ['HTN', 'DM'] }) conditions!: string[] | null;
+  @ApiProperty({ type: String, nullable: true, example: 'Hypothyroidism' }) otherConditions!: string | null;
+  @ApiProperty({ type: Number, nullable: true, example: 64, description: 'Worked out from dateOfBirth; read-only' }) age!: number | null;
+  @ApiProperty({ type: Number, nullable: true, example: 23.2, description: 'onboardingWeightKg / height in metres squared, 1 decimal; read-only' }) bmi!: number | null;
+  @ApiProperty({ type: Number, nullable: true, example: 10, description: "Days from the patient's today to plannedSurgeryDate; negative after; read-only" }) daysToSurgery!: number | null;
   @ApiProperty({ example: 1, description: '0 until first saved; send it back with your next PATCH' }) version!: number;
   @ApiProperty({ type: String, nullable: true, example: TIME }) updatedAt!: string | null;
   @ApiProperty({ type: UpdatedByDoc, nullable: true }) updatedBy!: UpdatedByDoc | null;
