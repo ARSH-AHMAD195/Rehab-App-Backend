@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ClientSession } from 'mongoose';
-import { AUDIT_ACTIONS, DETAIL_CODES, ROLES, Role } from '../common/constants';
-import { ValidationFailedException } from '../common/api.exception';
+import { AUDIT_ACTIONS, DETAIL_CODES, Language, ROLES, Role } from '../common/constants';
+import { PhoneAlreadyExistsException, ValidationFailedException } from '../common/api.exception';
 import { TransactionRunner } from '../common/mongo/transaction.runner';
 import { isValidTimeZone } from '../common/time';
 import { AuditService } from '../audit/audit.service';
@@ -14,9 +14,10 @@ export interface ProfileChanges {
   phone?: string | null;
   timeZone?: string;
   specialization?: string | null;
+  preferredLanguage?: Language;
 }
 
-const PROFILE_FIELDS = ['name', 'phone', 'timeZone', 'specialization'] as const;
+const PROFILE_FIELDS = ['name', 'phone', 'timeZone', 'specialization', 'preferredLanguage'] as const;
 
 /**
  * Basic-profile edits and (de)activation, for PATCH /users/me/profile,
@@ -62,6 +63,12 @@ export class AccountsService {
 
     const activeChanged = active !== undefined && active !== user.active;
     if (!Object.keys(after).length && !activeChanged) return user;
+
+    // A patient's phone number is their login: it must stay theirs alone.
+    // The unique index catches a race; this gives the clear answer first.
+    if (user.role === ROLES.PATIENT && typeof after.phone === 'string' && (await this.users.patientPhoneTaken(after.phone, user._id))) {
+      throw new PhoneAlreadyExistsException();
+    }
 
     // Firebase first: a deactivated user must be locked out even if the
     // profile write then fails - and it is put back if it does.

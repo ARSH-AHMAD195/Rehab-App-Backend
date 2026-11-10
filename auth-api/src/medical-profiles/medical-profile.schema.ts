@@ -36,6 +36,18 @@ export class MedicalProfile {
   @Prop({ type: String, default: null }) programmeStartDate!: string | null;
   @Prop({ type: Number, default: null }) programmeLengthDays!: number | null;
 
+  // Doctor onboarding (client change request, Nov 2026).
+  /** Weight taken at onboarding: the baseline for BMI and later weight-loss checks. */
+  @Prop({ type: Number, default: null }) onboardingWeightKg!: number | null;
+  @Prop({ type: Boolean, default: null }) chemotherapy!: boolean | null;
+  @Prop({ type: Boolean, default: null }) radiotherapy!: boolean | null;
+  @Prop({ type: String, default: null }) lastChemoDate!: string | null;
+  @Prop({ type: String, default: null }) chemoSchedule!: string | null;
+  @Prop({ type: Boolean, default: null }) anaemia!: boolean | null;
+  /** Checkbox codes from CONDITIONS. Separate from the older free-text comorbidities, which stay as they are. */
+  @Prop({ type: [String], default: null }) conditions!: string[] | null;
+  @Prop({ type: String, default: null }) otherConditions!: string | null;
+
   /** Optimistic concurrency: PATCH sends the version it read. */
   @Prop({ required: true, default: 1 })
   version!: number;
@@ -74,6 +86,14 @@ const FIELD_SET: Record<
   emergencyContact: true,
   programmeStartDate: true,
   programmeLengthDays: true,
+  onboardingWeightKg: true,
+  chemotherapy: true,
+  radiotherapy: true,
+  lastChemoDate: true,
+  chemoSchedule: true,
+  anaemia: true,
+  conditions: true,
+  otherConditions: true,
 };
 export type MedicalField = keyof typeof FIELD_SET;
 export const MEDICAL_FIELDS = Object.keys(FIELD_SET) as MedicalField[];

@@ -19,6 +19,7 @@ import { MeModule } from './me/me.module';
 import { DoctorsModule } from './doctors/doctors.module';
 import { MedicalProfilesModule } from './medical-profiles/medical-profiles.module';
 import { PatientsModule } from './patients/patients.module';
+import { LoginCodesModule } from './login-codes/login-codes.module';
 
 @Module({
   imports: [
@@ -47,14 +48,16 @@ import { PatientsModule } from './patients/patients.module';
     // Before PatientsModule, so /patients/me/medical-profile is matched first.
     MedicalProfilesModule,
     PatientsModule,
+    LoginCodesModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     // Global guards run in the order registered here:
     //  1. the per-IP limit, before any token work, so a flood of bad tokens
     //     never reaches Firebase;
-    //  2. authentication;
-    //  3. email verified (skipped only on GET /auth/me);
+    //  2. authentication (skipped on the two @Public() login-code routes);
+    //  3. email verified (skipped on GET /auth/me; a patient signed in
+    //     with a doctor-issued login code counts as verified);
     //  4. the role check;
     //  5. the per-user limits, keyed on the identity from step 2.
     { provide: APP_GUARD, useClass: IpThrottlerGuard },

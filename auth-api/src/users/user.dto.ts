@@ -20,7 +20,14 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
-import { DEFAULT_PAGE_LIMIT, MAX_DOCTORS_PER_PATIENT, MAX_PAGE_LIMIT, PHONE_PATTERN } from '../common/constants';
+import {
+  DEFAULT_PAGE_LIMIT,
+  LANGUAGES,
+  Language,
+  MAX_DOCTORS_PER_PATIENT,
+  MAX_PAGE_LIMIT,
+  PHONE_PATTERN,
+} from '../common/constants';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 const lower = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim().toLowerCase() : value);
@@ -32,7 +39,8 @@ const PHONE_ISSUE = 'must be in E.164 format, e.g. +919876543210';
 
 // ---------------------------------------------------------------- registration
 
-export class RegisterAdminDto {
+/** Name and phone: what every registration has in common. */
+class RegisterBaseDto {
   @ApiProperty({ example: 'Priya Menon' })
   @Transform(trim)
   @IsString()
@@ -40,16 +48,22 @@ export class RegisterAdminDto {
   @MaxLength(100)
   name!: string;
 
+  @ApiPropertyOptional({
+    example: '+919876543210',
+    nullable: true,
+    description: 'E.164. For a patient it is also their login (with a code from their doctor), so it must be unused by other patients.',
+  })
+  @IsOptional()
+  @Matches(PHONE_PATTERN, { message: PHONE_ISSUE })
+  phone?: string | null;
+}
+
+export class RegisterAdminDto extends RegisterBaseDto {
   @ApiProperty({ example: 'priya@example.com', description: 'Stored in lower case. Must be unused.' })
   @Transform(lower)
   @IsEmail()
   @MaxLength(254)
   email!: string;
-
-  @ApiPropertyOptional({ example: '+919876543210', nullable: true })
-  @IsOptional()
-  @Matches(PHONE_PATTERN, { message: PHONE_ISSUE })
-  phone?: string | null;
 }
 
 export class RegisterDoctorDto extends RegisterAdminDto {
@@ -61,7 +75,22 @@ export class RegisterDoctorDto extends RegisterAdminDto {
   specialization?: string | null;
 }
 
-export class RegisterPatientDto extends RegisterAdminDto {
+/**
+ * A patient needs a phone number, an email, or both (checked in
+ * PatientsService). The phone number is their login, with a doctor-issued
+ * code; with only an email they get the set-password email as before.
+ */
+export class RegisterPatientDto extends RegisterBaseDto {
+  @ApiPropertyOptional({
+    example: 'rajesh@example.com',
+    description: 'Optional when a phone number is given. Stored in lower case. Must be unused.',
+  })
+  @ifSent
+  @Transform(lower)
+  @IsEmail()
+  @MaxLength(254)
+  email?: string;
+
   @ApiPropertyOptional({ example: 'Asia/Kolkata', description: 'IANA zone. Defaults to Asia/Kolkata.' })
   @ifSent
   @IsString()
@@ -107,6 +136,11 @@ export class UpdateMyProfileDto {
   @IsString()
   @MaxLength(100)
   specialization?: string | null;
+
+  @ApiPropertyOptional({ enum: LANGUAGES, description: 'App language' })
+  @ifSent
+  @IsIn(LANGUAGES)
+  preferredLanguage?: Language;
 }
 
 export class UpdatePatientDto {
@@ -174,7 +208,7 @@ export class SetDoctorsDto {
 // ---------------------------------------------------------------- lists
 
 export class UserListQueryDto {
-  @ApiPropertyOptional({ description: 'Name or email contains (case-insensitive).' })
+  @ApiPropertyOptional({ description: 'Name, email or phone contains (case-insensitive).' })
   @IsOptional()
   @Transform(trim)
   @IsString()

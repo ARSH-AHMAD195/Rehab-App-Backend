@@ -30,6 +30,7 @@ export class FirebaseIdentityProvider implements IdentityProvider {
         uid: decoded.uid,
         email: decoded.email ?? null,
         emailVerified: decoded.email_verified === true,
+        signInProvider: decoded.firebase?.sign_in_provider ?? null,
       };
     } catch (error) {
       this.logger.debug(`Token rejected: ${(error as Error).message}`);
@@ -37,17 +38,24 @@ export class FirebaseIdentityProvider implements IdentityProvider {
     }
   }
 
-  async createAccount(input: { email: string; name: string }): Promise<{ uid: string }> {
+  async createAccount(input: { email?: string | null; name: string }): Promise<{ uid: string }> {
     try {
-      const user = await this.auth().createUser({
-        email: input.email,
-        displayName: input.name,
-        emailVerified: false,
-        // A random password nobody knows. The user sets their own through the
-        // emailed link; having a password from the start guarantees Firebase
-        // treats the account as email/password, so the reset link works.
-        password: randomBytes(32).toString('base64url'),
-      });
+      const user = await this.auth().createUser(
+        input.email
+          ? {
+              email: input.email,
+              displayName: input.name,
+              emailVerified: false,
+              // A random password nobody knows. The user sets their own through
+              // the emailed link; having a password from the start guarantees
+              // Firebase treats the account as email/password, so the reset
+              // link works.
+              password: randomBytes(32).toString('base64url'),
+            }
+          : // Login-code patient: no email, no password. They can only sign in
+            // with a custom token this API makes after a correct code.
+            { displayName: input.name },
+      );
       return { uid: user.uid };
     } catch (error) {
       if ((error as { code?: string }).code === 'auth/email-already-exists') {
@@ -80,6 +88,11 @@ export class FirebaseIdentityProvider implements IdentityProvider {
       const body = await response.text();
       throw new Error(`Firebase sendOobCode failed (${response.status}): ${body.slice(0, 200)}`);
     }
+  }
+
+  async createCustomToken(uid: string): Promise<string> {
+    // Signed with the service account's key, so only this API can make one.
+    return this.auth().createCustomToken(uid);
   }
 
   /** Fails the boot, not the first request, when Firebase is misconfigured. */

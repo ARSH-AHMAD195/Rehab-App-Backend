@@ -1,6 +1,7 @@
 import { CanActivate, ExecutionContext, Inject, Injectable } from '@nestjs/common';
 import { Request } from 'express';
 import { EmailNotVerifiedException, UnauthenticatedException } from '../api.exception';
+import { ROLES } from '../constants';
 import { TOKEN_VERIFIER, TokenVerifier } from '../../auth/token-verifier';
 import { AuthUser, UsersService } from '../../users/users.service';
 
@@ -22,10 +23,13 @@ export class FirebaseAuthGuard implements CanActivate {
     const req = ctx.switchToHttp().getRequest<Request & { user?: AuthUser }>();
     const token = this.extractBearer(req.headers.authorization);
 
-    const { uid, emailVerified } = await this.verifier.verify(token);
+    const { uid, emailVerified, signInProvider } = await this.verifier.verify(token);
     const user = await this.users.findByFirebaseUid(uid);
     if (!user) throw new UnauthenticatedException('No active user profile for this token');
-    if (!emailVerified) throw new EmailNotVerifiedException();
+    // A patient who signed in with a doctor-issued login code has no email to
+    // verify; only the Auth API can make the custom token that sign-in uses.
+    const codeLogin = signInProvider === 'custom' && user.role === ROLES.PATIENT;
+    if (!emailVerified && !codeLogin) throw new EmailNotVerifiedException();
 
     req.user = user;
     return true;

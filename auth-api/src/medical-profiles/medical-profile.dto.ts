@@ -2,7 +2,9 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayUnique,
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -15,7 +17,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { BLOOD_GROUPS, PHONE_PATTERN, SEXES, SMOKING_STATUSES } from '../common/constants';
+import { BLOOD_GROUPS, CONDITIONS, PHONE_PATTERN, SEXES, SMOKING_STATUSES, WEIGHT_KG_RANGE } from '../common/constants';
 import { MedicalField } from './medical-profile.schema';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -144,6 +146,57 @@ export class UpdateMedicalProfileDto {
   @Min(1)
   @Max(365)
   programmeLengthDays?: number | null;
+
+  // ------------------------------------------------ doctor onboarding
+
+  @ApiPropertyOptional({ example: 68.5, nullable: true, description: `Weight at onboarding, kg (${WEIGHT_KG_RANGE.min}-${WEIGHT_KG_RANGE.max}). Used for BMI.` })
+  @IsOptional()
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @Min(WEIGHT_KG_RANGE.min)
+  @Max(WEIGHT_KG_RANGE.max)
+  onboardingWeightKg?: number | null;
+
+  @ApiPropertyOptional({ example: true, nullable: true, description: 'Chemotherapy received' })
+  @IsOptional()
+  @IsBoolean()
+  chemotherapy?: boolean | null;
+
+  @ApiPropertyOptional({ example: false, nullable: true, description: 'Radiotherapy received' })
+  @IsOptional()
+  @IsBoolean()
+  radiotherapy?: boolean | null;
+
+  @ApiPropertyOptional({ example: '2026-10-02', nullable: true, description: 'Date of the last chemotherapy; not in the future' })
+  @IsOptional()
+  @Matches(DATE, { message: DATE_ISSUE })
+  lastChemoDate?: string | null;
+
+  @ApiPropertyOptional({ example: 'FOLFOX, every 2 weeks, 6 cycles', nullable: true })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(500)
+  chemoSchedule?: string | null;
+
+  @ApiPropertyOptional({ example: false, nullable: true })
+  @IsOptional()
+  @IsBoolean()
+  anaemia?: boolean | null;
+
+  @ApiPropertyOptional({ enum: CONDITIONS, isArray: true, nullable: true, example: ['HTN', 'DM'], description: 'The ticked boxes. Put details of OTHER in otherConditions.' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(CONDITIONS.length)
+  @ArrayUnique()
+  @IsIn(CONDITIONS, { each: true })
+  conditions?: string[] | null;
+
+  @ApiPropertyOptional({ example: 'Hypothyroidism', nullable: true })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(200)
+  otherConditions?: string | null;
 }
 
 // Compile-time only: the DTO's fields (besides version) are exactly the schema's MEDICAL_FIELDS.

@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { Types } from 'mongoose';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
 import { ROLES } from '../common/constants';
-import { toLocalIso } from '../common/time';
+import { DEFAULT_DISPLAY_TIME_ZONE, toLocalIso, todayIn } from '../common/time';
+import { daysUntil } from '../medical-profiles/derived';
+import { MedicalProfile } from '../medical-profiles/medical-profile.schema';
 import { UserDocument } from './user.schema';
 import { UsersService } from './users.service';
 
@@ -16,6 +19,7 @@ export interface ProfileResponse {
   name: string;
   email: string | null;
   phone: string | null;
+  preferredLanguage: string;
   timeZone?: string | null;
   doctors?: DoctorRef[];
   specialization?: string | null;
@@ -32,6 +36,10 @@ export interface PatientResponse {
   active: boolean;
   emailVerified: boolean;
   doctors: DoctorRef[];
+  /** From the medical profile: shown on the doctor's patient list. */
+  plannedSurgeryDate: string | null;
+  /** Whole days from the patient's today; negative once surgery has passed. */
+  daysToSurgery: number | null;
   createdAt: string | null;
 }
 
@@ -60,7 +68,10 @@ export interface AdminResponse {
 /** Turns `users` documents into the response shapes of v1.0. */
 @Injectable()
 export class UserResponses {
-  constructor(private readonly users: UsersService) {}
+  constructor(
+    private readonly users: UsersService,
+    @InjectModel(MedicalProfile.name) private readonly profiles: Model<MedicalProfile>,
+  ) {}
 
   async profile(user: UserDocument): Promise<ProfileResponse> {
     const zone = user.timeZone;
@@ -70,6 +81,7 @@ export class UserResponses {
       name: user.name,
       email: user.email,
       phone: user.phone ?? null,
+      preferredLanguage: user.preferredLanguage ?? 'en',
       createdAt: toLocalIso(user.createdAt, zone),
       updatedAt: toLocalIso(user.updatedAt, zone),
     };
@@ -81,14 +93,34 @@ export class UserResponses {
     return base;
   }
 
-  /** Patients, with their doctors' names looked up in one query. */
+  /** Patients, with their doctors' names and surgery dates looked up in one query each. */
   async patients(users: UserDocument[]): Promise<PatientResponse[]> {
     const doctorIds = [...new Set(users.flatMap((u) => u.doctorIds.map(String)))].map(
       (id) => new Types.ObjectId(id),
     );
-    const names = await this.users.doctorNames(doctorIds);
+    const [names, profiles] = await Promise.all([
+      this.users.doctorNames(doctorIds),
+      users.length
+        ? this.profiles
+            .find({ patientId: { $in: users.map((u) => u._id) } }, { patientId: 1, plannedSurgeryDate: 1 })
+            .lean()
+        : Promise.resolve([]),
+    ]);
+    const surgeryById = new Map(profiles.map((p) => [String(p.patientId), p.plannedSurgeryDate ?? null]));
 
-    return users.map((user) => ({
+    return users.map((user) => {
+      const plannedSurgeryDate = surgeryById.get(String(user._id)) ?? null;
+      return {
+        ...this.patientBase(user, names),
+        plannedSurgeryDate,
+        daysToSurgery: daysUntil(plannedSurgeryDate, todayIn(user.timeZone || DEFAULT_DISPLAY_TIME_ZONE)),
+        createdAt: toLocalIso(user.createdAt, user.timeZone),
+      };
+    });
+  }
+
+  private patientBase(user: UserDocument, names: Map<string, string>) {
+    return {
       id: String(user._id),
       name: user.name,
       email: user.email,
@@ -97,8 +129,7 @@ export class UserResponses {
       active: user.active,
       emailVerified: user.emailVerified ?? false,
       doctors: user.doctorIds.map((id) => ({ id: String(id), name: names.get(String(id)) ?? 'Unknown' })),
-      createdAt: toLocalIso(user.createdAt, user.timeZone),
-    }));
+    };
   }
 
   /** Doctors, with `patientCount` (active linked patients) counted in one query. */

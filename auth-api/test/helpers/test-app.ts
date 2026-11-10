@@ -16,24 +16,58 @@ import { IDENTITY_PROVIDER, IdentityProvider, VerifiedToken } from '../../src/id
  * Accounts created through the API start unverified, like real ones; tests
  * call `verifyEmail(uid)` to play the user clicking their emailed link.
  */
+export interface FakeAccount {
+  email: string | null;
+  emailVerified: boolean;
+  disabled: boolean;
+  /** "custom" once signed in with a custom token (see signInWithCustomToken). */
+  signInProvider?: string;
+}
+
 export class FakeIdentityProvider implements IdentityProvider {
-  accounts = new Map<string, { email: string | null; emailVerified: boolean; disabled: boolean }>();
+  accounts = new Map<string, FakeAccount>();
   sentEmails: string[] = [];
   deleted: string[] = [];
+  customTokens: string[] = [];
   failEmails = false;
   private next = 1;
 
   async verifyToken(idToken: string): Promise<VerifiedToken> {
     const account = this.accounts.get(idToken);
     if (!account || account.disabled) throw new UnauthenticatedException();
-    return { uid: idToken, email: account.email, emailVerified: account.emailVerified };
+    return {
+      uid: idToken,
+      email: account.email,
+      emailVerified: account.emailVerified,
+      signInProvider: account.signInProvider ?? (account.email ? 'password' : null),
+    };
   }
 
-  async createAccount(input: { email: string; name: string }): Promise<{ uid: string }> {
-    if ([...this.accounts.values()].some((a) => a.email === input.email)) throw new EmailAlreadyExistsException();
+  async createAccount(input: { email?: string | null; name: string }): Promise<{ uid: string }> {
+    if (input.email && [...this.accounts.values()].some((a) => a.email === input.email)) {
+      throw new EmailAlreadyExistsException();
+    }
     const uid = `fb-${this.next++}`;
-    this.accounts.set(uid, { email: input.email, emailVerified: false, disabled: false });
+    this.accounts.set(uid, { email: input.email ?? null, emailVerified: false, disabled: false });
     return { uid };
+  }
+
+  async createCustomToken(uid: string): Promise<string> {
+    const token = `custom-token:${uid}`;
+    this.customTokens.push(token);
+    return token;
+  }
+
+  /**
+   * Plays the app calling Firebase's signInWithCustomToken: returns the bearer
+   * token to use from then on (in these tests, the uid), now marked as a
+   * custom-token sign-in.
+   */
+  signInWithCustomToken(token: string): string {
+    if (!this.customTokens.includes(token)) throw new Error(`Not a token this API made: ${token}`);
+    const uid = token.slice('custom-token:'.length);
+    this.accounts.get(uid)!.signInProvider = 'custom';
+    return uid;
   }
 
   async deleteAccount(uid: string): Promise<void> {
@@ -59,6 +93,7 @@ export class FakeIdentityProvider implements IdentityProvider {
     this.accounts.clear();
     this.sentEmails = [];
     this.deleted = [];
+    this.customTokens = [];
     this.failEmails = false;
     this.next = 1;
   }
@@ -76,6 +111,7 @@ export interface SeedUser {
   role: Role;
   name: string;
   email?: string;
+  phone?: string;
   doctorIds?: string[];
   active?: boolean;
   emailVerified?: boolean;
@@ -143,7 +179,7 @@ export async function createTestApp(): Promise<TestContext> {
         role: user.role,
         name: user.name,
         email,
-        phone: null,
+        phone: user.phone ?? null,
         ...(user.role === 'PATIENT'
           ? {
               timeZone: user.timeZone ?? 'Asia/Kolkata',
@@ -169,7 +205,7 @@ export async function createTestApp(): Promise<TestContext> {
       return doc!.firebaseUid as string;
     },
     async reset() {
-      for (const name of ['users', 'medicalProfiles', 'auditLogs']) {
+      for (const name of ['users', 'medicalProfiles', 'auditLogs', 'loginCodes']) {
         await connection.collection(name).deleteMany({});
       }
       identity.reset();

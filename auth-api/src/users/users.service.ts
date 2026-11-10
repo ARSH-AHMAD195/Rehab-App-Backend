@@ -58,6 +58,18 @@ export class UsersService {
       .then((found) => found !== null);
   }
 
+  /** Whether another patient already has this phone number (their login). */
+  patientPhoneTaken(phone: string, exceptId?: Types.ObjectId): Promise<boolean> {
+    return this.model
+      .exists({ role: ROLES.PATIENT, phone, ...(exceptId ? { _id: { $ne: exceptId } } : {}) })
+      .then((found) => found !== null);
+  }
+
+  /** The active patient who signs in with this phone number, if any. */
+  findActivePatientByPhone(phone: string): Promise<UserDocument | null> {
+    return this.model.findOne({ role: ROLES.PATIENT, phone, active: true }).exec();
+  }
+
   /** A user of the given role, or 404. */
   async getByRole(id: string, role: Role, message: string): Promise<UserDocument> {
     const objectId = toObjectId(id);

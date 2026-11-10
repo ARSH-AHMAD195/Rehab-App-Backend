@@ -9,7 +9,8 @@ import {
   ValidationFailedException,
 } from '../common/api.exception';
 import { TransactionRunner } from '../common/mongo/transaction.runner';
-import { toLocalIso } from '../common/time';
+import { DEFAULT_DISPLAY_TIME_ZONE, toLocalIso, todayIn } from '../common/time';
+import { ageOn, bmiOf, daysUntil } from './derived';
 import { AuditService } from '../audit/audit.service';
 import { UserDocument } from '../users/user.schema';
 import {
@@ -24,6 +25,10 @@ type Actor = { id: string; role: Role };
 
 export type MedicalProfileResponse = Record<MedicalField, unknown> & {
   patientId: string;
+  /** Worked out by the API (see derived.ts); read-only, null when an input is missing. */
+  age: number | null;
+  bmi: number | null;
+  daysToSurgery: number | null;
   version: number;
   updatedAt: string | null;
   updatedBy: { id: string; role: string } | null;
@@ -63,7 +68,7 @@ export class MedicalProfilesService {
     patient: UserDocument,
     dto: UpdateMedicalProfileDto,
   ): Promise<MedicalProfileResponse> {
-    this.assertDates(dto);
+    this.assertDates(dto, patient);
 
     const current = await this.model.findOne({ patientId: patient._id }).exec();
     if ((current?.version ?? 0) !== dto.version) {
@@ -120,10 +125,13 @@ export class MedicalProfilesService {
     return this.toResponse(patient, saved);
   }
 
-  /** Calendar checks the DTO can't do: real dates, a birth date in the past, age 0-120. */
-  private assertDates(dto: UpdateMedicalProfileDto): void {
+  /**
+   * Calendar checks the DTO can't do: real dates, a birth date in the past,
+   * age 0-120, and a last chemo date that isn't in the patient's future.
+   */
+  private assertDates(dto: UpdateMedicalProfileDto, patient: UserDocument): void {
     const details: ErrorDetail[] = [];
-    for (const field of ['dateOfBirth', 'plannedSurgeryDate', 'programmeStartDate'] as const) {
+    for (const field of ['dateOfBirth', 'plannedSurgeryDate', 'programmeStartDate', 'lastChemoDate'] as const) {
       const value = dto[field];
       if (value && !DateTime.fromISO(value).isValid) {
         details.push({ field, code: DETAIL_CODES.WRONG_SHAPE, issue: 'is not a real calendar date' });
@@ -136,7 +144,15 @@ export class MedicalProfilesService {
         details.push({ field: 'dateOfBirth', code: DETAIL_CODES.OUT_OF_RANGE, issue: 'must be in the past, age 0-120' });
       }
     }
+    if (dto.lastChemoDate && DateTime.fromISO(dto.lastChemoDate).isValid && dto.lastChemoDate > this.today(patient)) {
+      details.push({ field: 'lastChemoDate', code: DETAIL_CODES.OUT_OF_RANGE, issue: 'cannot be in the future' });
+    }
     if (details.length) throw new ValidationFailedException(details);
+  }
+
+  /** The patient's own calendar date. */
+  private today(patient: UserDocument): string {
+    return todayIn(patient.timeZone || DEFAULT_DISPLAY_TIME_ZONE);
   }
 
   /** Strips class instances and Mongoose wrappers, for comparing and storing. */
@@ -148,10 +164,14 @@ export class MedicalProfilesService {
     const fields = Object.fromEntries(
       MEDICAL_FIELDS.map((field) => [field, this.plain(profile?.[field] ?? null)]),
     ) as Record<MedicalField, unknown>;
+    const today = this.today(patient);
 
     return {
       patientId: String(patient._id),
       ...fields,
+      age: ageOn(profile?.dateOfBirth, today),
+      bmi: bmiOf(profile?.onboardingWeightKg, profile?.heightCm),
+      daysToSurgery: daysUntil(profile?.plannedSurgeryDate, today),
       version: profile?.version ?? 0,
       updatedAt: toLocalIso(profile?.updatedAt, patient.timeZone),
       updatedBy: profile?.updatedBy

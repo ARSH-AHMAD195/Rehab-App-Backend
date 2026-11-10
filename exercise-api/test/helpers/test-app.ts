@@ -49,12 +49,18 @@ export interface TestContext {
 
 /**
  * Resolves the bearer token to a uid, standing in for verifyIdToken. Every
- * user's email is verified, except uids starting with "unverified-".
+ * user's email is verified, except uids starting with "unverified-" or
+ * "code-"; "code-" uids signed in with a doctor-issued login code.
  */
 class StubTokenVerifier implements TokenVerifier {
-  async verify(idToken: string): Promise<{ uid: string; emailVerified: boolean }> {
+  async verify(idToken: string): Promise<{ uid: string; emailVerified: boolean; signInProvider: string | null }> {
     if (!idToken || idToken === 'invalid') throw new UnauthenticatedException();
-    return { uid: idToken, emailVerified: !idToken.startsWith('unverified-') };
+    const codeLogin = idToken.startsWith('code-');
+    return {
+      uid: idToken,
+      emailVerified: !idToken.startsWith('unverified-') && !codeLogin,
+      signInProvider: codeLogin ? 'custom' : 'password',
+    };
   }
 }
 

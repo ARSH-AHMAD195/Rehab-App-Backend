@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { DateTime } from 'luxon';
 import { createTestApp, TestContext, TestUser } from './helpers/test-app';
 
 describe('Medical profile', () => {
@@ -102,6 +103,105 @@ describe('Medical profile', () => {
     expect(read.body).toMatchObject({ programmeStartDate: '2026-10-23', programmeLengthDays: 28 });
   });
 
+  describe('doctor onboarding', () => {
+    // The patient's own today (seeded patients are in Asia/Kolkata).
+    const today = () => DateTime.now().setZone('Asia/Kolkata').startOf('day');
+    const iso = (d: DateTime) => d.toISODate()!;
+
+    it('a doctor saves the onboarding fields; BMI, age and days to surgery are worked out', async () => {
+      const res = await api()
+        .patch(theirs())
+        .set('Authorization', t.auth(doctor))
+        .send({
+          version: 0,
+          dateOfBirth: iso(today().minus({ years: 64, days: 1 })),
+          sex: 'MALE',
+          heightCm: 172,
+          onboardingWeightKg: 68.5,
+          chemotherapy: true,
+          radiotherapy: false,
+          lastChemoDate: iso(today().minus({ days: 20 })),
+          chemoSchedule: ' FOLFOX, every 2 weeks ',
+          anaemia: false,
+          medications: ['Metformin 500 mg twice daily'],
+          conditions: ['HTN', 'DM', 'OTHER'],
+          otherConditions: 'Hypothyroidism',
+          plannedSurgeryDate: iso(today().plus({ days: 10 })),
+        })
+        .expect(200);
+
+      expect(res.body).toMatchObject({
+        version: 1,
+        onboardingWeightKg: 68.5,
+        chemotherapy: true,
+        radiotherapy: false,
+        chemoSchedule: 'FOLFOX, every 2 weeks',
+        anaemia: false,
+        conditions: ['HTN', 'DM', 'OTHER'],
+        otherConditions: 'Hypothyroidism',
+        age: 64,
+        bmi: 23.2,
+        daysToSurgery: 10,
+        updatedBy: { id: doctor.id, role: 'DOCTOR' },
+      });
+
+      // The patient sees the same on their own read.
+      const mineRead = await api().get(mine).set('Authorization', t.auth(patient)).expect(200);
+      expect(mineRead.body).toMatchObject({ age: 64, bmi: 23.2, daysToSurgery: 10, chemotherapy: true });
+
+      const audit = await t.connection.collection('auditLogs').findOne({ action: 'MEDICAL_PROFILE_UPDATED' });
+      expect(audit?.after).toMatchObject({ onboardingWeightKg: 68.5, conditions: ['HTN', 'DM', 'OTHER'] });
+    });
+
+    it('calculated values are null until their inputs are set, and follow later changes', async () => {
+      const empty = await api().get(theirs()).set('Authorization', t.auth(doctor)).expect(200);
+      expect(empty.body).toMatchObject({ age: null, bmi: null, daysToSurgery: null });
+
+      await api()
+        .patch(theirs())
+        .set('Authorization', t.auth(doctor))
+        .send({ version: 0, heightCm: 175, onboardingWeightKg: 70, plannedSurgeryDate: iso(today().minus({ days: 3 })) })
+        .expect(200);
+      const cleared = await api()
+        .patch(theirs())
+        .set('Authorization', t.auth(doctor))
+        .send({ version: 1, onboardingWeightKg: null })
+        .expect(200);
+      expect(cleared.body).toMatchObject({ bmi: null, daysToSurgery: -3 });
+    });
+
+    it('calculated values cannot be written', async () => {
+      const res = await api().patch(theirs()).set('Authorization', t.auth(doctor)).send({ version: 0, bmi: 22 }).expect(400);
+      expect(res.body.code).toBe('VALIDATION_FAILED');
+    });
+
+    it('the patient list shows each patient\'s surgery date and days to surgery', async () => {
+      const noProfile = await t.seed({ role: 'PATIENT', name: 'Anil Kumar', doctorIds: [doctor.id] });
+      await api()
+        .patch(theirs())
+        .set('Authorization', t.auth(doctor))
+        .send({ version: 0, plannedSurgeryDate: iso(today().plus({ days: 14 })) })
+        .expect(200);
+
+      const list = await api().get('/api/v1/patients').set('Authorization', t.auth(doctor)).expect(200);
+      const byId = new Map(list.body.data.map((p: { id: string }) => [p.id, p]));
+      expect(byId.get(patient.id)).toMatchObject({ plannedSurgeryDate: iso(today().plus({ days: 14 })), daysToSurgery: 14 });
+      expect(byId.get(noProfile.id)).toMatchObject({ plannedSurgeryDate: null, daysToSurgery: null });
+
+      const one = await api().get(`/api/v1/patients/${patient.id}`).set('Authorization', t.auth(doctor)).expect(200);
+      expect(one.body).toMatchObject({ daysToSurgery: 14 });
+    });
+
+    it('400 for a last chemo date in the future', async () => {
+      const res = await api()
+        .patch(theirs())
+        .set('Authorization', t.auth(doctor))
+        .send({ version: 0, lastChemoDate: iso(today().plus({ days: 1 })) })
+        .expect(400);
+      expect(res.body.details[0]).toMatchObject({ field: 'lastChemoDate', code: 'OUT_OF_RANGE' });
+    });
+  });
+
   it('an unlinked doctor gets 404; an admin and the patient get 403 on the doctor route', async () => {
     await api().get(theirs()).set('Authorization', t.auth(otherDoctor)).expect(404);
     await api().patch(theirs()).set('Authorization', t.auth(otherDoctor)).send({ version: 0, sex: 'MALE' }).expect(404);
@@ -142,6 +242,17 @@ describe('Medical profile', () => {
       ['programme of 0 days', { version: 0, programmeLengthDays: 0 }],
       ['programme over a year', { version: 0, programmeLengthDays: 366 }],
       ['programme length not whole', { version: 0, programmeLengthDays: 7.5 }],
+      ['onboarding weight too low', { version: 0, onboardingWeightKg: 10 }],
+      ['onboarding weight too high', { version: 0, onboardingWeightKg: 300 }],
+      ['onboarding weight not a number', { version: 0, onboardingWeightKg: '70' }],
+      ['chemotherapy not yes/no', { version: 0, chemotherapy: 'yes' }],
+      ['anaemia not yes/no', { version: 0, anaemia: 1 }],
+      ['impossible last chemo date', { version: 0, lastChemoDate: '2026-02-30' }],
+      ['chemo schedule too long', { version: 0, chemoSchedule: 'x'.repeat(501) }],
+      ['unknown condition', { version: 0, conditions: ['ASTHMA'] }],
+      ['condition twice', { version: 0, conditions: ['HTN', 'HTN'] }],
+      ['conditions not a list', { version: 0, conditions: 'HTN' }],
+      ['other conditions too long', { version: 0, otherConditions: 'x'.repeat(201) }],
     ];
 
     it.each(bad)('400 for %s', async (_label, body) => {

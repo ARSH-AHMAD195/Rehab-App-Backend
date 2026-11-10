@@ -82,6 +82,20 @@ describe('Patient vitals (v1.1 /me/vitals)', () => {
       expect(res.body).toMatchObject({ statusCode: 403, code: ERROR_CODES.EMAIL_NOT_VERIFIED });
     });
 
+    it('lets in a patient who signed in with a doctor-issued login code (no email to verify)', async () => {
+      const codePatient = await ctx.createUser({ uid: 'code-pat', role: 'PATIENT', name: 'Code Patient', timeZone: ZONE });
+      await http().get('/api/v1/vital-types').set('Authorization', `Bearer ${ctx.token(codePatient)}`).expect(200);
+    });
+
+    it('a login-code sign-in does not stand in for a verified email on a doctor', async () => {
+      const codeDoctor = await ctx.createUser({ uid: 'code-doc', role: 'DOCTOR', name: 'Code Doctor' });
+      const res = await http()
+        .get('/api/v1/vital-types')
+        .set('Authorization', `Bearer ${ctx.token(codeDoctor)}`)
+        .expect(403);
+      expect(res.body.code).toBe(ERROR_CODES.EMAIL_NOT_VERIFIED);
+    });
+
     it('returns the request id it was given', async () => {
       const res = await asPatient('get', '/api/v1/vital-types')
         .set('X-Request-Id', 'req-abc')
