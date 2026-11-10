@@ -205,7 +205,7 @@ export async function createTestApp(): Promise<TestContext> {
       return doc!.firebaseUid as string;
     },
     async reset() {
-      for (const name of ['users', 'medicalProfiles', 'auditLogs', 'loginCodes']) {
+      for (const name of ['users', 'medicalProfiles', 'auditLogs', 'loginCodes', 'investigations', 'investigationRanges']) {
         await connection.collection(name).deleteMany({});
       }
       identity.reset();

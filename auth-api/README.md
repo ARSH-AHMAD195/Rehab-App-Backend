@@ -40,7 +40,7 @@ project. Everything else — guards, validation, transactions, audit — is the 
 
 ---
 
-## The 22 endpoints
+## The 28 endpoints
 
 | Method | Route | Role | Source |
 |---|---|---|---|
@@ -66,6 +66,12 @@ project. Everything else — guards, validation, transactions, audit — is the 
 | POST | `/auth/login-code/verify` | no sign-in | ″ |
 | GET | `/doctor/login-code-requests` | doctor, admin | ″ |
 | POST | `/patients/:patientId/login-code` | doctor, admin | ″ |
+| GET | `/investigation-tests` | doctor, admin | `src/investigations/investigations.controller.ts` |
+| POST | `/patients/:patientId/investigations` | doctor | ″ |
+| GET | `/patients/:patientId/investigations` | doctor | ″ |
+| POST | `/patients/:patientId/investigations/:resultId/retract` | doctor | ″ |
+| GET | `/admin/investigation-ranges` | admin | ″ |
+| PUT | `/admin/investigation-ranges` | admin | ″ |
 
 Email login and Forgot Password have no routes: the app does them with the Firebase SDK. Patient
 login with a doctor-issued code is below (section 7).
@@ -77,7 +83,9 @@ login with a doctor-issued code is below (section 7).
 | `users` | Every user: role, name, email, phone, active; `timeZone` and `doctorIds` for patients; `specialization` for doctors |
 | `medicalProfiles` | One per patient, kept apart from `users` so admin screens never load medical data |
 | `loginCodes` | One per patient: their open code request and/or the hash of their current login code. Deletes itself when done |
-| `auditLogs` | Shared with Health Monitoring; this module writes 11 actions |
+| `investigations` | One row per test result (patient, test, date, values or WNL). Never edited or deleted; wrong ones are retracted |
+| `investigationRanges` | Approved normal ranges, one per test field. Empty until the clinical team supplies them |
+| `auditLogs` | Shared with Health Monitoring; this module writes 15 actions |
 
 ## Where the v1.0 rules live
 
@@ -170,3 +178,30 @@ Registration: a patient needs a phone number, an email or both. Phone only →
 already share a number. Check with
 `db.users.aggregate([{$match:{role:"PATIENT",phone:{$type:"string"}}},{$group:{_id:"$phone",n:{$sum:1}}},{$match:{n:{$gt:1}}}])`
 and fix any it finds first.
+
+### 8. Investigations (the PAC grid)
+The doctor's Investigations menu follows the hospital's pre-anaesthesia check-up form, plus serum
+albumin (needed for triage). The tests and their fields are in
+`src/investigations/investigation-tests.ts`; `GET /investigation-tests` serves them to the app.
+Blood group is not here: it is already on the medical profile.
+
+- **One result = one test on one date.** Repeat tests are new results, so the history is always
+  kept. `GET /patients/:patientId/investigations` returns every test with its results, newest test
+  date first; the app shows the first 2-3 side by side for the trend.
+- **WNL quick entry** (`wnl: true`, no values) for LFT, TFT, ECG and imaging. Imaging still names
+  the study (e.g. "Chest X-ray").
+- **Never edited or deleted.** A wrong result is retracted with a reason
+  (`POST .../:resultId/retract`): kept, audited, and hidden from the grid unless
+  `?includeRetracted=true`. The right value is entered as a new result.
+- **Red flags only against approved ranges.** An admin enters the clinical team's normal ranges
+  with `PUT /admin/investigation-ranges`; the list starts empty and nothing is flagged until a
+  range exists. Results are checked against the range in force when they are read, so a newly
+  approved range also flags older results. An abnormal ECG is always flagged.
+- The `min`/`max` on each field only catch typing mistakes (Hb 110 instead of 11.0); they are
+  not clinical limits.
+- Doctors only (linked patients), like the medical profile. Reads and changes are audited, and a
+  read that can't be audited fails.
+
+Waiting on the client: the normal ranges (and whether they differ by age or sex), the eGFR formula
+(creatinine is stored, eGFR is not worked out yet), and what "Free text medication assigned" means.
+Hb, albumin, HbA1c and creatinine are marked `feedsTriage` for the triage work.
