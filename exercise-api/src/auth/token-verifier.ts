@@ -3,6 +3,11 @@ export interface VerifiedToken {
   uid: string;
   /** The token's own email_verified claim, as the Auth API reads it. */
   emailVerified: boolean;
+  /**
+   * Firebase's sign_in_provider: "custom" when the app signed in with the token
+   * the Auth API makes after a correct doctor-issued login code.
+   */
+  signInProvider: string | null;
 }
 
 export interface TokenVerifier {

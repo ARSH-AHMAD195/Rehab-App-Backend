@@ -1,5 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { BLOOD_GROUPS, CONDITIONS, INVITATION_STATUS, ROLES, SEXES, SMOKING_STATUSES } from './constants';
+import {
+  BLOOD_GROUPS,
+  CONDITIONS,
+  INVITATION_STATUS,
+  LANGUAGES,
+  LOGIN_METHODS,
+  ROLES,
+  SEXES,
+  SMOKING_STATUSES,
+} from './constants';
 import { AdminResponse, DoctorResponse, PatientResponse, ProfileResponse } from '../users/user.responses';
 import { MedicalProfileResponse } from '../medical-profiles/medical-profiles.service';
 
@@ -23,6 +32,11 @@ export class MeResponseDoc {
   @ApiProperty({ example: 'Rajesh Iyer' }) name!: string;
   @ApiProperty({ type: String, nullable: true, example: 'patient@example.com' }) email!: string | null;
   @ApiProperty({ description: 'false until the user clicks the link in the verification email' }) emailVerified!: boolean;
+  @ApiProperty({
+    enum: Object.values(LOGIN_METHODS),
+    description: 'LOGIN_CODE: signed in with a doctor-issued code. Such a patient has no email to verify, so skip the "verify your email" screen.',
+  })
+  loginMethod!: string;
   @ApiProperty({ description: 'Always true: a switched-off user gets 401 instead' }) active!: boolean;
 }
 
@@ -32,6 +46,7 @@ export class ProfileResponseDoc {
   @ApiProperty({ example: 'Rajesh Iyer' }) name!: string;
   @ApiProperty({ type: String, nullable: true }) email!: string | null;
   @ApiProperty({ type: String, nullable: true, example: '+919876543210' }) phone!: string | null;
+  @ApiProperty({ enum: LANGUAGES, example: 'en', description: 'App language' }) preferredLanguage!: string;
   @ApiPropertyOptional({ type: String, nullable: true, example: 'Asia/Kolkata', description: 'Patients only' }) timeZone?: string | null;
   @ApiPropertyOptional({ type: [DoctorRefDoc], description: 'Patients only' }) doctors?: DoctorRefDoc[];
   @ApiPropertyOptional({ type: String, nullable: true, example: 'Surgical oncology', description: 'Doctors only' }) specialization?: string | null;

@@ -43,6 +43,13 @@ export class PatientsService {
     if (actor.role === ROLES.DOCTOR && dto.doctorIds !== undefined) {
       details.push({ field: 'doctorIds', code: DETAIL_CODES.NOT_ALLOWED, issue: 'is set to you when a doctor registers a patient' });
     }
+    if (!dto.email && !dto.phone) {
+      details.push({
+        field: 'phone',
+        code: DETAIL_CODES.REQUIRED,
+        issue: 'a patient needs a phone number (to sign in with a code from their doctor) or an email',
+      });
+    }
     if (actor.role === ROLES.ADMIN && dto.doctorIds === undefined) {
       details.push({ field: 'doctorIds', code: DETAIL_CODES.REQUIRED, issue: 'at least one doctor is required' });
     }
@@ -57,8 +64,8 @@ export class PatientsService {
       {
         role: ROLES.PATIENT,
         name: dto.name,
-        email: dto.email,
-        phone: dto.phone,
+        email: dto.email ?? null,
+        phone: dto.phone ?? null,
         timeZone: dto.timeZone ?? DEFAULT_PATIENT_TIME_ZONE,
         doctorIds,
       },

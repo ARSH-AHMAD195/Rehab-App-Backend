@@ -40,7 +40,7 @@ project. Everything else — guards, validation, transactions, audit — is the 
 
 ---
 
-## The 18 endpoints
+## The 22 endpoints
 
 | Method | Route | Role | Source |
 |---|---|---|---|
@@ -62,8 +62,13 @@ project. Everything else — guards, validation, transactions, audit — is the 
 | PATCH | `/patients/me/medical-profile` | patient | ″ |
 | GET | `/patients/:patientId/medical-profile` | doctor | ″ |
 | PATCH | `/patients/:patientId/medical-profile` | doctor | ″ |
+| POST | `/auth/login-code/request` | no sign-in | `src/login-codes/login-codes.controller.ts` |
+| POST | `/auth/login-code/verify` | no sign-in | ″ |
+| GET | `/doctor/login-code-requests` | doctor, admin | ″ |
+| POST | `/patients/:patientId/login-code` | doctor, admin | ″ |
 
-Login and Forgot Password have no routes: the app does them with the Firebase SDK.
+Email login and Forgot Password have no routes: the app does them with the Firebase SDK. Patient
+login with a doctor-issued code is below (section 7).
 
 ## Collections
 
@@ -71,7 +76,8 @@ Login and Forgot Password have no routes: the app does them with the Firebase SD
 |---|---|
 | `users` | Every user: role, name, email, phone, active; `timeZone` and `doctorIds` for patients; `specialization` for doctors |
 | `medicalProfiles` | One per patient, kept apart from `users` so admin screens never load medical data |
-| `auditLogs` | Shared with Health Monitoring; this module writes 8 actions |
+| `loginCodes` | One per patient: their open code request and/or the hash of their current login code. Deletes itself when done |
+| `auditLogs` | Shared with Health Monitoring; this module writes 11 actions |
 
 ## Where the v1.0 rules live
 
@@ -132,3 +138,35 @@ time zone; negative once surgery has passed). `GET /patients` shows each patient
 `npm run seed:dev-users` creates five verified test logins (admin, two doctors, two patients)
 with the password in `FIREBASE_TEST_PASSWORD`. They use the same uids as Health Monitoring's test
 users, so one login works on both APIs. **Never run it against production.**
+
+### 7. Patient login with a code from their doctor (no SMS)
+The client asked for mobile number + one-time code, but **not** sent by SMS: the code goes to the
+patient's doctor, who passes it on (in person, by phone or by message).
+
+1. Patient app: phone number → `POST /auth/login-code/request`. Always `202` with the same
+   message, so the route can't be used to find out who is a patient. Optional: the doctor can
+   also make a code without being asked.
+2. Doctor app: `GET /doctor/login-code-requests` lists linked patients waiting (an admin sees
+   all). `POST /patients/:patientId/login-code` returns a 6-digit code, once, to pass on. A new
+   code replaces the old one.
+3. Patient app: phone + code → `POST /auth/login-code/verify` → `{ customToken }`. Pass it to
+   Firebase's `signInWithCustomToken`; from then on use normal ID tokens, as with email login.
+   The patient stays signed in on that phone.
+
+Rules: a code works once, for 10 minutes, for 5 tries (`LOGIN_CODE_TTL_MINUTES`,
+`LOGIN_CODE_MAX_ATTEMPTS` - defaults until the client confirms). Only its hash is stored, and it is
+never logged; request, issue and use are audited. Every failure is the same
+`401 INVALID_LOGIN_CODE`. Both sign-in routes allow 10 calls per minute per IP address.
+
+A code-login patient has no email to verify: `GET /auth/me` returns `loginMethod: "LOGIN_CODE"`
+(so the app skips the "verify your email" screen), and all three APIs accept them. This only
+holds for patients: only this API can make custom tokens, and it makes them only for patients.
+
+Registration: a patient needs a phone number, an email or both. Phone only →
+`invitation: "NOT_NEEDED"` and no email. A patient's phone number is unique among patients
+(`409 PHONE_ALREADY_EXISTS`); doctors and admins may share one.
+
+**Before deploying:** the unique index on patients' phone numbers can't be built if two patients
+already share a number. Check with
+`db.users.aggregate([{$match:{role:"PATIENT",phone:{$type:"string"}}},{$group:{_id:"$phone",n:{$sum:1}}},{$match:{n:{$gt:1}}}])`
+and fix any it finds first.

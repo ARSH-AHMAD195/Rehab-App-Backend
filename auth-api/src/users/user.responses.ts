@@ -19,6 +19,7 @@ export interface ProfileResponse {
   name: string;
   email: string | null;
   phone: string | null;
+  preferredLanguage: string;
   timeZone?: string | null;
   doctors?: DoctorRef[];
   specialization?: string | null;
@@ -80,6 +81,7 @@ export class UserResponses {
       name: user.name,
       email: user.email,
       phone: user.phone ?? null,
+      preferredLanguage: user.preferredLanguage ?? 'en',
       createdAt: toLocalIso(user.createdAt, zone),
       updatedAt: toLocalIso(user.updatedAt, zone),
     };

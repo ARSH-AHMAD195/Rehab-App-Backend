@@ -1,7 +1,10 @@
 import { CanActivate, ExecutionContext, Inject, Injectable } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { UnauthenticatedException } from '../api.exception';
-import { IDENTITY_PROVIDER, IdentityProvider } from '../../identity/identity-provider';
+import { LOGIN_METHODS } from '../constants';
+import { PUBLIC_KEY } from '../decorators/public.decorator';
+import { CUSTOM_SIGN_IN, IDENTITY_PROVIDER, IdentityProvider } from '../../identity/identity-provider';
 import { AuthUser } from '../../users/auth-user';
 import { UsersService } from '../../users/users.service';
 
@@ -15,9 +18,12 @@ export class FirebaseAuthGuard implements CanActivate {
   constructor(
     @Inject(IDENTITY_PROVIDER) private readonly identity: IdentityProvider,
     private readonly users: UsersService,
+    private readonly reflector: Reflector,
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
+    if (this.reflector.getAllAndOverride<boolean>(PUBLIC_KEY, [ctx.getHandler(), ctx.getClass()])) return true;
+
     const req = ctx.switchToHttp().getRequest<Request & { user?: AuthUser }>();
     const token = this.extractBearer(req.headers.authorization);
 
@@ -37,6 +43,7 @@ export class FirebaseAuthGuard implements CanActivate {
       name: user.name,
       email: user.email ?? verified.email,
       emailVerified: verified.emailVerified,
+      loginMethod: verified.signInProvider === CUSTOM_SIGN_IN ? LOGIN_METHODS.LOGIN_CODE : LOGIN_METHODS.PASSWORD,
       timeZone: user.timeZone ?? null,
       doctorIds: user.doctorIds.map(String),
     };

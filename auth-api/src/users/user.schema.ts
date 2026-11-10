@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
-import { ROLES, Role } from '../common/constants';
+import { LANGUAGES, Language, ROLES, Role } from '../common/constants';
 
 /**
  * `users` - owned by this module.
@@ -26,9 +26,16 @@ export class User {
   @Prop({ type: String, default: null })
   email!: string | null;
 
-  /** E.164, e.g. +919876543210. */
+  /**
+   * E.164, e.g. +919876543210. For a patient it is also their login (with a
+   * doctor-issued code), so no two patients share one - see the index below.
+   */
   @Prop({ type: String, default: null })
   phone!: string | null;
+
+  /** App language. Content in Hindi arrives with the translations. */
+  @Prop({ type: String, enum: LANGUAGES, default: 'en' })
+  preferredLanguage!: Language;
 
   /** IANA zone, e.g. "Asia/Kolkata". Patients only. */
   @Prop({ type: String })
@@ -80,6 +87,12 @@ export const UserSchema = SchemaFactory.createForClass(User);
 UserSchema.index(
   { email: 1 },
   { unique: true, partialFilterExpression: { email: { $type: 'string' } } },
+);
+// A patient's phone number is their login, so it must lead to one patient.
+// Doctors and admins may share a number (a clinic desk phone, say).
+UserSchema.index(
+  { phone: 1 },
+  { unique: true, partialFilterExpression: { role: 'PATIENT', phone: { $type: 'string' } } },
 );
 UserSchema.index({ role: 1, doctorIds: 1 });
 UserSchema.index({ role: 1, active: 1, name: 1 });
