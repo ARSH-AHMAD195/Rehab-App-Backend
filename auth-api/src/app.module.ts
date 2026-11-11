@@ -20,6 +20,7 @@ import { DoctorsModule } from './doctors/doctors.module';
 import { MedicalProfilesModule } from './medical-profiles/medical-profiles.module';
 import { PatientsModule } from './patients/patients.module';
 import { LoginCodesModule } from './login-codes/login-codes.module';
+import { InvestigationsModule } from './investigations/investigations.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { LoginCodesModule } from './login-codes/login-codes.module';
     MedicalProfilesModule,
     PatientsModule,
     LoginCodesModule,
+    InvestigationsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
