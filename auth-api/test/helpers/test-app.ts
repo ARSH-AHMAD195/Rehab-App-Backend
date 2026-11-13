@@ -206,7 +206,7 @@ export async function createTestApp(): Promise<TestContext> {
       return doc!.firebaseUid as string;
     },
     async reset() {
-      for (const name of ['users', 'medicalProfiles', 'auditLogs', 'loginCodes', 'investigations', 'investigationRanges', 'triageRules', 'dailyLogs', 'careAlerts', 'exerciseCompletions']) {
+      for (const name of ['users', 'medicalProfiles', 'auditLogs', 'loginCodes', 'investigations', 'investigationRanges', 'triageRules', 'dailyLogs', 'careAlerts', 'exerciseCompletions', 'mealLogs']) {
         await connection.collection(name).deleteMany({});
       }
       // As on a fresh start: the client's triage table as version 1.

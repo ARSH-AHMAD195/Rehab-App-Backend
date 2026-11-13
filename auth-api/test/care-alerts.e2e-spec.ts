@@ -124,6 +124,47 @@ describe('Care-team alerts', () => {
     expect(res.body.data[0]).toMatchObject({ kind: 'MUST_RISE', message: `MUST score rose from 0 (${daysAgo(10)}) to 1 (${daysAgo(1)})` });
   });
 
+  describe('intake below 75% for 3 days in a row', () => {
+    /** Health Monitoring's meal log, written directly (that API isn't running here). */
+    const meals = (date: string, kcal: number, slotsEaten = 4) =>
+      t.connection.collection('mealLogs').insertOne({
+        patientId: new Types.ObjectId(patient.id),
+        date,
+        timeZone: 'Asia/Kolkata',
+        slots: {},
+        totals: { kcal, proteinG: 30, slotsEaten },
+        targets: { kcal: 2206, proteinG: 82.4 },
+        planVersion: 0,
+      });
+
+    it('raises one alert, kept open while intake stays low', async () => {
+      await meals(daysAgo(3), 1300);
+      await meals(daysAgo(2), 1100);
+      await meals(daysAgo(1), 1500);
+      const res = await inbox().expect(200);
+      expect(kinds(res)).toEqual(['NUTRITION_LOW']);
+      expect(res.body.data[0].details.days.map((d: { percent: number }) => d.percent)).toEqual([68, 50, 59]);
+
+      // The next day is low too: still the one open alert.
+      await meals(daysAgo(0), 900);
+      await t.connection.collection('mealLogs').updateOne({ date: daysAgo(3) }, { $set: { date: daysAgo(4) } });
+      expect(kinds(await inbox().expect(200))).toEqual(['NUTRITION_LOW']);
+    });
+
+    it('a good day in between means no alert', async () => {
+      await meals(daysAgo(3), 1300);
+      await meals(daysAgo(2), 2000);
+      await meals(daysAgo(1), 1500);
+      expect((await inbox().expect(200)).body.data).toEqual([]);
+    });
+
+    it('meals count as logging for "no logging"', async () => {
+      await registeredDaysAgo(10);
+      await meals(daysAgo(1), 2100);
+      expect((await inbox().expect(200)).body.data).toEqual([]);
+    });
+  });
+
   describe('no logging for 3 days', () => {
     it('counts from the last vitals log', async () => {
       await registeredDaysAgo(10);

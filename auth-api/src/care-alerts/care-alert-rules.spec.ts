@@ -2,12 +2,13 @@ import { DEFAULT_TRIAGE_RULES } from '../triage/triage-rules';
 import { AlertInputs, AlertSettings, detectAlerts } from './care-alert-rules';
 
 const TODAY = '2026-11-14';
-const settings: AlertSettings = { weightLossPercent: 5, noLoggingDays: 3, recentDays: 14 };
+const settings: AlertSettings = { weightLossPercent: 5, noLoggingDays: 3, recentDays: 14, nutritionLowPercent: 75, nutritionLowDays: 3 };
 const quiet = (): AlertInputs => ({
   today: TODAY,
   results: [],
   vitals: [{ date: TODAY, pulse: 72, bp: { systolic: 120, diastolic: 80 }, weight: 70 }],
   onboardingWeightKg: 70,
+  meals: [],
   lastActivityDate: TODAY,
   registeredOn: '2026-10-01',
 });
@@ -100,6 +101,31 @@ describe('care-team alert rules', () => {
     it('a rise to 2 is both a High value and a rise', () => {
       const results = [result('m1', 'MUST', { score: 1 }, '2026-11-01'), result('m2', 'MUST', { score: 2 }, '2026-11-10')];
       expect(keys({ results }).sort()).toEqual(['HIGH_VALUE:result:m2', 'MUST_RISE:m2']);
+    });
+  });
+
+  describe('intake below 75% for 3 days in a row', () => {
+    const meal = (date: string, kcal: number, slotsEaten = 4) => ({ date, kcal, targetKcal: 2000, slotsEaten });
+    const lowWeek = [meal('2026-11-13', 1400), meal('2026-11-12', 1000), meal('2026-11-11', 1200)]; // 70%, 50%, 60%
+
+    it('three finished days each under 75% of the calorie target', () => {
+      expect(keys({ meals: lowWeek })).toEqual(['NUTRITION_LOW:2026-11-13']);
+      expect(detect({ meals: lowWeek })[0].message).toBe(
+        'Ate under 75% of the calorie target for 3 days in a row (60%, 50%, 70%, up to 2026-11-13)',
+      );
+    });
+
+    it('exactly 75% on one of the days breaks the run', () => {
+      expect(keys({ meals: [meal('2026-11-13', 1500), lowWeek[1], lowWeek[2]] })).toEqual([]);
+    });
+
+    it('only 2 low days, or a day with nothing logged, is not enough', () => {
+      expect(keys({ meals: lowWeek.slice(0, 2) })).toEqual([]);
+      expect(keys({ meals: [lowWeek[0], meal('2026-11-12', 0, 0), lowWeek[2]] })).toEqual([]);
+    });
+
+    it('today, still going on, does not count', () => {
+      expect(keys({ meals: [meal(TODAY, 100), lowWeek[0], lowWeek[1]] })).toEqual([]);
     });
   });
 

@@ -244,7 +244,8 @@ once (`PATCH /doctor/care-alerts/:alertId`, audited; `409 ALERT_ALREADY_ACKNOWLE
 | `HIGH_VALUE` | An investigation result in the last 14 days, or a pulse/BP in the triage vitals window, at a **triage High cut-off** (Hb, albumin, HbA1c, eGFR, MUST, pulse, BP) - so alerts and the tag always agree |
 | `WEIGHT_LOSS` | The newest weight is **more than 5%** below `onboardingWeightKg`. One open at a time |
 | `MUST_RISE` | The newest MUST score is higher than the one before |
-| `NO_LOGGING` | No vitals logged and no exercise ticked or skipped for **3 days or more** (counted from registration if they never logged) |
+| `NO_LOGGING` | No vitals, no exercise ticked or skipped and no meals logged for **3 days or more** (counted from registration if they never logged) |
+| `NUTRITION_LOW` | Intake below **75% of the calorie target** on each of the last **3 finished days**, every one of them logged (meals from Health Monitoring, read-only). One open at a time. Calories only, until the client says otherwise |
 
 **Checked when the inbox is opened**, from the data as it is then (`src/care-alerts/care-alert-rules.ts`,
 unit tested). So the inbox is always current, with no background job and no always-on server.
@@ -253,5 +254,4 @@ alert per key, so nothing is raised twice and an acknowledged alert never comes 
 reading. Other vitals (SpO2, temperature...) keep alerting through Health Monitoring's own limits.
 
 Not yet: sending alerts out (push/SMS/WhatsApp) - that needs the client's choice of channel, and a
-timer (and an always-on server) so alerts go out when nobody has the app open. Diet logging will
-count towards "no logging" once nutrition exists.
+timer (and an always-on server) so alerts go out when nobody has the app open.

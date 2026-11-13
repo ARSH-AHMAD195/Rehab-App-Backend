@@ -133,6 +133,13 @@ export const CARE_ALERTS = {
   NO_LOGGING_DAYS: 3,
   /** Investigation results taken in the last N days can raise a "new High value" alert. */
   RECENT_DAYS: 14,
+  /**
+   * Intake below this percentage of the CALORIE target on each of the last N
+   * finished days, every one of them logged. ⏳ Client question 17: calories,
+   * protein, either or both, and whether unlogged days count.
+   */
+  NUTRITION_LOW_PERCENT: 75,
+  NUTRITION_LOW_DAYS: 3,
 } as const;
 
 export const CARE_ALERT_KINDS = {
@@ -140,6 +147,7 @@ export const CARE_ALERT_KINDS = {
   WEIGHT_LOSS: 'WEIGHT_LOSS',
   MUST_RISE: 'MUST_RISE',
   NO_LOGGING: 'NO_LOGGING',
+  NUTRITION_LOW: 'NUTRITION_LOW',
 } as const;
 export type CareAlertKind = (typeof CARE_ALERT_KINDS)[keyof typeof CARE_ALERT_KINDS];
 

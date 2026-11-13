@@ -15,7 +15,7 @@ import { TriageService } from '../triage/triage.service';
 import { UserDocument } from '../users/user.schema';
 import { UsersService, toObjectId } from '../users/users.service';
 import { AlertCandidate, ResultInput, VitalsDay, detectAlerts } from './care-alert-rules';
-import { CARE_ALERT_STATUS, CareAlert, CareAlertDocument, CareAlertStatus, ExerciseCompletionView } from './care-alert.schema';
+import { CARE_ALERT_STATUS, CareAlert, CareAlertDocument, CareAlertStatus, ExerciseCompletionView, MealLogView } from './care-alert.schema';
 
 type Actor = { id: string; role: Role };
 
@@ -51,6 +51,7 @@ export class CareAlertsService {
     @InjectModel(MedicalProfile.name) private readonly profiles: Model<MedicalProfile>,
     @InjectModel(DailyLogView.name) private readonly dailyLogs: Model<DailyLogView>,
     @InjectModel(ExerciseCompletionView.name) private readonly completions: Model<ExerciseCompletionView>,
+    @InjectModel(MealLogView.name) private readonly meals: Model<MealLogView>,
     private readonly triage: TriageService,
     private readonly users: UsersService,
     private readonly audit: AuditService,
@@ -139,7 +140,7 @@ export class CareAlertsService {
     const earliest = (days: number) =>
       [...todayOf.values()].map((d) => DateTime.fromISO(d).minus({ days }).toISODate()!).sort()[0];
 
-    const [results, logs, profiles, lastLogs, lastTicks] = await Promise.all([
+    const [results, logs, profiles, lastLogs, lastTicks, mealRows, lastMeals] = await Promise.all([
       this.investigations
         .find(
           {
@@ -166,11 +167,19 @@ export class CareAlertsService {
         { $match: { patientId: { $in: ids }, active: true } },
         { $group: { _id: '$patientId', date: { $max: '$date' } } },
       ]),
+      this.meals
+        .find({ patientId: { $in: ids }, date: { $gte: earliest(CARE_ALERTS.NUTRITION_LOW_DAYS) } }, { patientId: 1, date: 1, totals: 1, targets: 1 })
+        .lean(),
+      this.meals.aggregate<{ _id: Types.ObjectId; date: string }>([
+        { $match: { patientId: { $in: ids }, 'totals.slotsEaten': { $gt: 0 } } },
+        { $group: { _id: '$patientId', date: { $max: '$date' } } },
+      ]),
     ]);
 
     const weightOf = new Map(profiles.map((p) => [String(p.patientId), p.onboardingWeightKg ?? null]));
     const lastLogOf = new Map(lastLogs.map((r) => [String(r._id), r.date]));
     const lastTickOf = new Map(lastTicks.map((r) => [String(r._id), r.date]));
+    const lastMealOf = new Map(lastMeals.map((r) => [String(r._id), r.date]));
 
     const candidates: { patientId: Types.ObjectId; alert: AlertCandidate }[] = [];
     for (const patient of patients) {
@@ -192,7 +201,10 @@ export class CareAlertsService {
       const mine: ResultInput[] = results
         .filter((r) => String(r.patientId) === id)
         .map((r) => ({ id: String(r._id), test: r.test, takenOn: r.takenOn, values: r.values ?? {} }));
-      const activity = [lastLogOf.get(id), lastTickOf.get(id)].filter((d): d is string => !!d && d <= today).sort();
+      const activity = [lastLogOf.get(id), lastTickOf.get(id), lastMealOf.get(id)].filter((d): d is string => !!d && d <= today).sort();
+      const meals = mealRows
+        .filter((m) => String(m.patientId) === id && m.totals && m.targets)
+        .map((m) => ({ date: m.date, kcal: m.totals.kcal, targetKcal: m.targets.kcal, slotsEaten: m.totals.slotsEaten }));
 
       const found = detectAlerts(
         {
@@ -200,27 +212,39 @@ export class CareAlertsService {
           results: mine,
           vitals,
           onboardingWeightKg: weightOf.get(id) ?? null,
+          meals,
           lastActivityDate: activity[activity.length - 1] ?? null,
           registeredOn: DateTime.fromJSDate(patient.createdAt).setZone(patient.timeZone || DEFAULT_DISPLAY_TIME_ZONE).toISODate()!,
         },
         rules,
-        { weightLossPercent: CARE_ALERTS.WEIGHT_LOSS_PERCENT, noLoggingDays: CARE_ALERTS.NO_LOGGING_DAYS, recentDays: CARE_ALERTS.RECENT_DAYS },
+        {
+          weightLossPercent: CARE_ALERTS.WEIGHT_LOSS_PERCENT,
+          noLoggingDays: CARE_ALERTS.NO_LOGGING_DAYS,
+          recentDays: CARE_ALERTS.RECENT_DAYS,
+          nutritionLowPercent: CARE_ALERTS.NUTRITION_LOW_PERCENT,
+          nutritionLowDays: CARE_ALERTS.NUTRITION_LOW_DAYS,
+        },
       );
       for (const alert of found) candidates.push({ patientId: patient._id as Types.ObjectId, alert });
     }
     if (!candidates.length) return;
 
-    // Skip what is already stored, and a new weight-loss alert while one is still open.
+    // Skip what is already stored, and - for the ongoing conditions (weight
+    // loss, low intake) - a new alert while one of that kind is still open.
+    const ongoing: string[] = [CARE_ALERT_KINDS.WEIGHT_LOSS, CARE_ALERT_KINDS.NUTRITION_LOW];
     const existing = await this.alerts
-      .find({ patientId: { $in: ids }, $or: [{ key: { $in: candidates.map((c) => c.alert.key) } }, { kind: CARE_ALERT_KINDS.WEIGHT_LOSS, status: CARE_ALERT_STATUS.OPEN }] }, { patientId: 1, key: 1, kind: 1, status: 1 })
+      .find(
+        { patientId: { $in: ids }, $or: [{ key: { $in: candidates.map((c) => c.alert.key) } }, { kind: { $in: ongoing }, status: CARE_ALERT_STATUS.OPEN }] },
+        { patientId: 1, key: 1, kind: 1, status: 1 },
+      )
       .lean();
     const seen = new Set(existing.map((e) => `${String(e.patientId)}|${e.key}`));
-    const openWeightLoss = new Set(existing.filter((e) => e.kind === CARE_ALERT_KINDS.WEIGHT_LOSS && e.status === CARE_ALERT_STATUS.OPEN).map((e) => String(e.patientId)));
+    const openOngoing = new Set(
+      existing.filter((e) => ongoing.includes(e.kind) && e.status === CARE_ALERT_STATUS.OPEN).map((e) => `${String(e.patientId)}|${e.kind}`),
+    );
 
     const fresh = candidates.filter(
-      (c) =>
-        !seen.has(`${String(c.patientId)}|${c.alert.key}`) &&
-        !(c.alert.kind === CARE_ALERT_KINDS.WEIGHT_LOSS && openWeightLoss.has(String(c.patientId))),
+      (c) => !seen.has(`${String(c.patientId)}|${c.alert.key}`) && !openOngoing.has(`${String(c.patientId)}|${c.alert.kind}`),
     );
     if (!fresh.length) return;
     try {

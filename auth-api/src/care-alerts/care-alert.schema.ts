@@ -67,3 +67,17 @@ export class ExerciseCompletionView {
 }
 
 export const ExerciseCompletionViewSchema = SchemaFactory.createForClass(ExerciseCompletionView);
+
+/**
+ * READ-ONLY view of Health Monitoring's `mealLogs` (nutrition), for the
+ * "intake below 75%" alert and for meals counting as logging.
+ */
+@Schema({ collection: 'mealLogs', strict: false, autoIndex: false })
+export class MealLogView {
+  @Prop({ type: Types.ObjectId }) patientId!: Types.ObjectId;
+  @Prop() date!: string;
+  @Prop({ type: Object }) totals!: { kcal: number; proteinG: number; slotsEaten: number };
+  @Prop({ type: Object }) targets!: { kcal: number; proteinG: number };
+}
+
+export const MealLogViewSchema = SchemaFactory.createForClass(MealLogView);

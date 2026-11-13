@@ -9,7 +9,8 @@ import { TriageRuleSet } from '../triage/triage-rules';
  *     so an alert and the tag always agree;
  *   - weight loss of more than 5% since onboarding;
  *   - a rise in MUST score;
- *   - no patient logging for 3 or more days.
+ *   - no patient logging for 3 or more days;
+ *   - intake below 75% of target for 3 days in a row (section 5.2).
  *
  * This works out which alerts SHOULD exist for one patient now. Each has a
  * `key` naming exactly what it is about (this Hb result, this day's pulse),
@@ -24,6 +25,16 @@ export interface AlertSettings {
   weightLossPercent: number;
   noLoggingDays: number;
   recentDays: number;
+  nutritionLowPercent: number;
+  nutritionLowDays: number;
+}
+
+/** One day of meal logging (Health Monitoring's meal log). */
+export interface MealDay {
+  date: string;
+  kcal: number;
+  targetKcal: number;
+  slotsEaten: number;
 }
 
 export interface ResultInput {
@@ -47,7 +58,9 @@ export interface AlertInputs {
   /** Daily vitals within the triage look-back window, newest first. */
   vitals: VitalsDay[];
   onboardingWeightKg: number | null;
-  /** The last day anything was logged (vitals or exercise); null if never. */
+  /** Meal logs of the last few days, any order. */
+  meals: MealDay[];
+  /** The last day anything was logged (vitals, exercise or meals); null if never. */
   lastActivityDate: string | null;
   /** The patient's registration day, for "no logging" when they never logged. */
   registeredOn: string;
@@ -141,7 +154,29 @@ export function detectAlerts(input: AlertInputs, rules: TriageRuleSet, settings:
     });
   }
 
-  // 5. No logging for N days or more.
+  // 5. Intake below X% of the calorie target on each of the last N finished
+  //    days (today is still going on, so it doesn't count yet). Every one of
+  //    those days must have meals logged: a day with nothing logged is the
+  //    "no logging" alert's business, not this one's.
+  const lowDays: MealDay[] = [];
+  for (let back = 1; back <= settings.nutritionLowDays; back++) {
+    const date = DateTime.fromISO(input.today).minus({ days: back }).toISODate()!;
+    const meal = input.meals.find((m) => m.date === date);
+    if (!meal || meal.slotsEaten === 0 || meal.targetKcal <= 0) break;
+    if ((meal.kcal / meal.targetKcal) * 100 >= settings.nutritionLowPercent) break;
+    lowDays.push(meal);
+  }
+  if (lowDays.length === settings.nutritionLowDays) {
+    const percents = lowDays.map((m) => Math.round((m.kcal / m.targetKcal) * 100));
+    alerts.push({
+      kind: CARE_ALERT_KINDS.NUTRITION_LOW,
+      key: `NUTRITION_LOW:${lowDays[0].date}`,
+      message: `Ate under ${settings.nutritionLowPercent}% of the calorie target for ${settings.nutritionLowDays} days in a row (${[...percents].reverse().join('%, ')}%, up to ${lowDays[0].date})`,
+      details: { days: lowDays.map((m, i) => ({ date: m.date, kcal: m.kcal, targetKcal: m.targetKcal, percent: percents[i] })) },
+    });
+  }
+
+  // 6. No logging for N days or more.
   const since = input.lastActivityDate ?? input.registeredOn;
   const quietDays = days(since, input.today);
   if (quietDays >= settings.noLoggingDays) {
