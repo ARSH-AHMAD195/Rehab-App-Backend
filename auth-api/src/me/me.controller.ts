@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Patch } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { MeResponseDoc, ProfileResponseDoc } from '../common/response-docs';
-import { DETAIL_CODES, ROLES } from '../common/constants';
+import { DETAIL_CODES, LoginMethod, ROLES } from '../common/constants';
 import { ErrorDetail, ValidationFailedException } from '../common/api.exception';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AllowUnverified } from '../common/guards/email-verified.guard';
@@ -17,6 +17,7 @@ interface MeResponse {
   name: string;
   email: string | null;
   emailVerified: boolean;
+  loginMethod: LoginMethod;
   active: boolean;
 }
 
@@ -45,6 +46,7 @@ export class MeController {
       name: user.name,
       email: user.email,
       emailVerified: user.emailVerified,
+      loginMethod: user.loginMethod,
       // The guard only lets active users through.
       active: true,
     };

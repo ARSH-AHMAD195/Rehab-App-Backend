@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { AUDIT_ACTIONS, InvitationStatus, ROLES, Role } from '../common/constants';
-import { EmailAlreadyExistsException } from '../common/api.exception';
+import { AUDIT_ACTIONS, INVITATION_STATUS, InvitationStatus, ROLES, Role } from '../common/constants';
+import { EmailAlreadyExistsException, PhoneAlreadyExistsException } from '../common/api.exception';
 import { TransactionRunner } from '../common/mongo/transaction.runner';
 import { AuditService } from '../audit/audit.service';
 import { IDENTITY_PROVIDER, IdentityProvider } from '../identity/identity-provider';
@@ -12,7 +12,8 @@ import { InvitationsService } from './invitations.service';
 export interface NewUser {
   role: Role;
   name: string;
-  email: string;
+  /** Required for doctors and admins; a patient may have only a phone number. */
+  email?: string | null;
   phone?: string | null;
   timeZone?: string;
   doctorIds?: Types.ObjectId[];
@@ -21,7 +22,8 @@ export interface NewUser {
 
 /**
  * v1.0 Onboarding, steps 1-3: create the Firebase account, then the profile,
- * then send the set-password email.
+ * then send the set-password email. A patient registered with a phone number
+ * only gets no email: they sign in with a code from their doctor.
  *
  * The two writes can't share a transaction, so the Firebase account is
  * removed again if the profile can't be saved: nothing is left half-created.
@@ -42,8 +44,12 @@ export class RegistrationService {
     input: NewUser,
     actor: { id: string; role: Role } | null,
   ): Promise<{ user: UserDocument; invitation: InvitationStatus }> {
-    const email = input.email.trim().toLowerCase();
-    if (await this.users.emailTaken(email)) throw new EmailAlreadyExistsException();
+    const email = input.email ? input.email.trim().toLowerCase() : null;
+    const phone = input.phone ?? null;
+    if (email && (await this.users.emailTaken(email))) throw new EmailAlreadyExistsException();
+    if (input.role === ROLES.PATIENT && phone && (await this.users.patientPhoneTaken(phone))) {
+      throw new PhoneAlreadyExistsException();
+    }
 
     const { uid } = await this.identity.createAccount({ email, name: input.name });
 
@@ -58,7 +64,7 @@ export class RegistrationService {
               role: input.role,
               name: input.name,
               email,
-              phone: input.phone ?? null,
+              phone,
               ...(input.role === ROLES.PATIENT
                 ? { timeZone: input.timeZone, doctorIds: input.doctorIds ?? [] }
                 : {}),
@@ -77,7 +83,7 @@ export class RegistrationService {
             action: AUDIT_ACTIONS.USER_REGISTERED,
             patientId: input.role === ROLES.PATIENT ? created._id : null,
             resourceId: String(created._id),
-            after: { role: input.role, name: input.name, email },
+            after: { role: input.role, name: input.name, email, phone },
           },
           session,
         );
@@ -87,13 +93,14 @@ export class RegistrationService {
       await this.identity.deleteAccount(uid).catch((cleanup: Error) =>
         this.logger.error(`Could not remove Firebase account ${uid} after a failed registration: ${cleanup.message}`),
       );
-      // Two registrations of one email racing: the unique index catches the loser.
+      // Two registrations of one email or phone racing: the unique index catches the loser.
       const clash = error as { code?: number; keyPattern?: Record<string, unknown> };
       if (clash.code === 11000 && clash.keyPattern?.email) throw new EmailAlreadyExistsException();
+      if (clash.code === 11000 && clash.keyPattern?.phone) throw new PhoneAlreadyExistsException();
       throw error;
     }
 
-    const invitation = await this.invitations.send(user, actor);
+    const invitation = email ? await this.invitations.send(user, actor) : INVITATION_STATUS.NOT_NEEDED;
     return { user, invitation };
   }
 }

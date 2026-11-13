@@ -63,6 +63,17 @@ describe('Exercise library (categories and exercises)', () => {
       const res = await as(unverified).get('/exercise-categories').expect(403);
       expect(res.body).toMatchObject({ statusCode: 403, code: ERROR_CODES.EMAIL_NOT_VERIFIED });
     });
+
+    it('lets in a patient who signed in with a doctor-issued login code (no email to verify)', async () => {
+      const codePatient = await ctx.createUser({ uid: 'code-pat', role: 'PATIENT', name: 'Code Patient' });
+      await as(codePatient).get('/exercise-categories').expect(200);
+    });
+
+    it('a login-code sign-in does not stand in for a verified email on a doctor', async () => {
+      const codeDoctor = await ctx.createUser({ uid: 'code-doc', role: 'DOCTOR', name: 'Code Doctor' });
+      const res = await as(codeDoctor).get('/exercise-categories').expect(403);
+      expect(res.body.code).toBe(ERROR_CODES.EMAIL_NOT_VERIFIED);
+    });
   });
 
   describe('categories', () => {

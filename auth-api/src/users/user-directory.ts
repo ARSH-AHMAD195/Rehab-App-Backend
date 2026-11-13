@@ -30,7 +30,7 @@ export async function listUsers(
   const and: FilterQuery<User>[] = [];
   if (query.q) {
     const pattern = new RegExp(escapeRegExp(query.q), 'i');
-    and.push({ $or: [{ name: pattern }, { email: pattern }] });
+    and.push({ $or: [{ name: pattern }, { email: pattern }, { phone: pattern }] });
   }
   if (query.cursor) {
     const { k, id } = decodeCursor(query.cursor);

@@ -68,6 +68,26 @@ export class EmailAlreadyExistsException extends ApiException {
   }
 }
 
+export class PhoneAlreadyExistsException extends ApiException {
+  constructor() {
+    super(HttpStatus.CONFLICT, ERROR_CODES.PHONE_ALREADY_EXISTS, 'Another patient already has this phone number');
+  }
+}
+
+/**
+ * One answer for a wrong, expired or used-up code and for an unknown phone
+ * number, so the route can't be used to find out who is a patient.
+ */
+export class InvalidLoginCodeException extends ApiException {
+  constructor() {
+    super(
+      HttpStatus.UNAUTHORIZED,
+      ERROR_CODES.INVALID_LOGIN_CODE,
+      'The code is wrong or has expired. Ask your doctor for a new one.',
+    );
+  }
+}
+
 export class DoctorHasPatientsException extends ApiException {
   constructor(count: number) {
     super(

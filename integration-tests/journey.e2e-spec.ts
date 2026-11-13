@@ -45,12 +45,18 @@ const EVERY_DAY = [1, 2, 3, 4, 5, 6, 7];
 /**
  * In tests the bearer token is the Firebase uid. In production each API asks
  * Firebase to verify the real token and gets the same uid back, with the
- * account's email_verified claim, read here from Auth's fake Firebase.
+ * account's email_verified claim and how it signed in, read here from Auth's
+ * fake Firebase.
  */
 const verifierThrowing = (Unauthenticated: new () => Error, identity: FakeIdentityProvider) => ({
   async verify(idToken: string) {
     if (!idToken) throw new Unauthenticated();
-    return { uid: idToken, emailVerified: identity.accounts.get(idToken)?.emailVerified === true };
+    const account = identity.accounts.get(idToken);
+    return {
+      uid: idToken,
+      emailVerified: account?.emailVerified === true,
+      signInProvider: account?.signInProvider ?? 'password',
+    };
   },
 });
 
@@ -273,5 +279,39 @@ describe('Auth + Health Monitoring + Exercise APIs, one database', () => {
     expect(exerciseEvents.sort()).toEqual(['exercise.completed', 'exercise.plan.assigned']);
     // Nobody but Auth wrote to users: still exactly the 4 people the admin script and Auth created.
     expect(await users.countDocuments()).toBe(4);
+  });
+
+  it('a patient registered by phone signs in with a code from their doctor and uses all three APIs', async () => {
+    const users = authApp.get(authConnectionToken()).collection('users');
+    const admin = bearer('admin-1'); // made by the first test
+    const ObjectId = require('../auth-api/node_modules/mongoose').Types.ObjectId;
+    const uidOf = async (id: string) => (await users.findOne({ _id: new ObjectId(id) }))!.firebaseUid as string;
+
+    const doctor = (await auth().post('/api/v1/doctors').set('Authorization', admin).send({ name: 'Dr Kavya Shah', email: 'kavya@test.example' }).expect(201)).body;
+    const uidD = await uidOf(doctor.id);
+    identity.verifyEmail(uidD);
+
+    // 1. The doctor registers the patient with only a phone number: no email goes out.
+    const phone = '+919812345678';
+    const patient = (await auth().post('/api/v1/patients').set('Authorization', bearer(uidD))
+      .send({ name: 'Sunita Rao', phone, timeZone: ZONE }).expect(201)).body;
+    expect(patient).toMatchObject({ email: null, invitation: 'NOT_NEEDED' });
+
+    // 2. The patient asks for a code; the doctor sees the request and makes one.
+    await auth().post('/api/v1/auth/login-code/request').send({ phone }).expect(202);
+    const waiting = (await auth().get('/api/v1/doctor/login-code-requests').set('Authorization', bearer(uidD)).expect(200)).body.data;
+    expect(waiting).toEqual([expect.objectContaining({ patient: { id: patient.id, name: 'Sunita Rao', phone } })]);
+    const { code } = (await auth().post(`/api/v1/patients/${patient.id}/login-code`).set('Authorization', bearer(uidD)).expect(201)).body;
+
+    // 3. The patient types it in and signs in to Firebase with the token they get back.
+    const { customToken } = (await auth().post('/api/v1/auth/login-code/verify').send({ phone, code }).expect(200)).body;
+    const uidP = identity.signInWithCustomToken(customToken);
+    expect((await auth().get('/api/v1/auth/me').set('Authorization', bearer(uidP)).expect(200)).body.loginMethod).toBe('LOGIN_CODE');
+
+    // 4. No email to verify, yet all three APIs let them in.
+    await hm().put('/api/v1/me/vitals/today').set('Authorization', bearer(uidP))
+      .send({ date: todayIn(ZONE), readings: { PULSE: { num: 72 } } }).expect(200);
+    await ex().get('/api/v1/patients/me/exercise-checklist').set('Authorization', bearer(uidP)).expect(200);
+    await auth().get('/api/v1/patients/me/medical-profile').set('Authorization', bearer(uidP)).expect(200);
   });
 });

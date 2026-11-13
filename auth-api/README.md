@@ -40,7 +40,7 @@ project. Everything else — guards, validation, transactions, audit — is the 
 
 ---
 
-## The 18 endpoints
+## The 28 endpoints
 
 | Method | Route | Role | Source |
 |---|---|---|---|
@@ -62,8 +62,19 @@ project. Everything else — guards, validation, transactions, audit — is the 
 | PATCH | `/patients/me/medical-profile` | patient | ″ |
 | GET | `/patients/:patientId/medical-profile` | doctor | ″ |
 | PATCH | `/patients/:patientId/medical-profile` | doctor | ″ |
+| POST | `/auth/login-code/request` | no sign-in | `src/login-codes/login-codes.controller.ts` |
+| POST | `/auth/login-code/verify` | no sign-in | ″ |
+| GET | `/doctor/login-code-requests` | doctor, admin | ″ |
+| POST | `/patients/:patientId/login-code` | doctor, admin | ″ |
+| GET | `/investigation-tests` | doctor, admin | `src/investigations/investigations.controller.ts` |
+| POST | `/patients/:patientId/investigations` | doctor | ″ |
+| GET | `/patients/:patientId/investigations` | doctor | ″ |
+| POST | `/patients/:patientId/investigations/:resultId/retract` | doctor | ″ |
+| GET | `/admin/investigation-ranges` | admin | ″ |
+| PUT | `/admin/investigation-ranges` | admin | ″ |
 
-Login and Forgot Password have no routes: the app does them with the Firebase SDK.
+Email login and Forgot Password have no routes: the app does them with the Firebase SDK. Patient
+login with a doctor-issued code is below (section 7).
 
 ## Collections
 
@@ -71,7 +82,10 @@ Login and Forgot Password have no routes: the app does them with the Firebase SD
 |---|---|
 | `users` | Every user: role, name, email, phone, active; `timeZone` and `doctorIds` for patients; `specialization` for doctors |
 | `medicalProfiles` | One per patient, kept apart from `users` so admin screens never load medical data |
-| `auditLogs` | Shared with Health Monitoring; this module writes 8 actions |
+| `loginCodes` | One per patient: their open code request and/or the hash of their current login code. Deletes itself when done |
+| `investigations` | One row per test result (patient, test, date, values or WNL). Never edited or deleted; wrong ones are retracted |
+| `investigationRanges` | Approved normal ranges, one per test field. Empty until the clinical team supplies them |
+| `auditLogs` | Shared with Health Monitoring; this module writes 15 actions |
 
 ## Where the v1.0 rules live
 
@@ -111,6 +125,17 @@ the API, so `GET /patients` can show it without one Firebase call per row.
 They are listed in the reference and need clinical confirmation. They live in
 `src/medical-profiles/medical-profile.schema.ts` and `medical-profile.dto.ts`.
 
+The doctor onboarding fields from the client's November 2026 change request are there too:
+`onboardingWeightKg`, `chemotherapy`, `radiotherapy`, `lastChemoDate`, `chemoSchedule`, `anaemia`,
+`conditions` (checkboxes: `HTN`, `DM`, `CKD`, `IHD`, `SMOKING`, `OTHER`) and `otherConditions`.
+Hb, albumin and the nutrition score are not here yet: they arrive with investigations and triage.
+
+The API also returns three read-only values, worked out on every read so they never go stale
+(`src/medical-profiles/derived.ts`): `age` (from `dateOfBirth`), `bmi` (from `onboardingWeightKg`
+and `heightCm`, 1 decimal) and `daysToSurgery` (from `plannedSurgeryDate`, in the patient's own
+time zone; negative once surgery has passed). `GET /patients` shows each patient's
+`plannedSurgeryDate` and `daysToSurgery`.
+
 ### 5. Health Monitoring compatibility
 `users` keeps every field Health Monitoring reads (`firebaseUid`, `role`, `name`, `timeZone`,
 `doctorIds`, `active`) with the same meaning. Once both modules are merged, Health Monitoring's
@@ -121,3 +146,62 @@ They are listed in the reference and need clinical confirmation. They live in
 `npm run seed:dev-users` creates five verified test logins (admin, two doctors, two patients)
 with the password in `FIREBASE_TEST_PASSWORD`. They use the same uids as Health Monitoring's test
 users, so one login works on both APIs. **Never run it against production.**
+
+### 7. Patient login with a code from their doctor (no SMS)
+The client asked for mobile number + one-time code, but **not** sent by SMS: the code goes to the
+patient's doctor, who passes it on (in person, by phone or by message).
+
+1. Patient app: phone number → `POST /auth/login-code/request`. Always `202` with the same
+   message, so the route can't be used to find out who is a patient. Optional: the doctor can
+   also make a code without being asked.
+2. Doctor app: `GET /doctor/login-code-requests` lists linked patients waiting (an admin sees
+   all). `POST /patients/:patientId/login-code` returns a 6-digit code, once, to pass on. A new
+   code replaces the old one.
+3. Patient app: phone + code → `POST /auth/login-code/verify` → `{ customToken }`. Pass it to
+   Firebase's `signInWithCustomToken`; from then on use normal ID tokens, as with email login.
+   The patient stays signed in on that phone.
+
+Rules: a code works once, for 10 minutes, for 5 tries (`LOGIN_CODE_TTL_MINUTES`,
+`LOGIN_CODE_MAX_ATTEMPTS` - defaults until the client confirms). Only its hash is stored, and it is
+never logged; request, issue and use are audited. Every failure is the same
+`401 INVALID_LOGIN_CODE`. Both sign-in routes allow 10 calls per minute per IP address.
+
+A code-login patient has no email to verify: `GET /auth/me` returns `loginMethod: "LOGIN_CODE"`
+(so the app skips the "verify your email" screen), and all three APIs accept them. This only
+holds for patients: only this API can make custom tokens, and it makes them only for patients.
+
+Registration: a patient needs a phone number, an email or both. Phone only →
+`invitation: "NOT_NEEDED"` and no email. A patient's phone number is unique among patients
+(`409 PHONE_ALREADY_EXISTS`); doctors and admins may share one.
+
+**Before deploying:** the unique index on patients' phone numbers can't be built if two patients
+already share a number. Check with
+`db.users.aggregate([{$match:{role:"PATIENT",phone:{$type:"string"}}},{$group:{_id:"$phone",n:{$sum:1}}},{$match:{n:{$gt:1}}}])`
+and fix any it finds first.
+
+### 8. Investigations (the PAC grid)
+The doctor's Investigations menu follows the hospital's pre-anaesthesia check-up form, plus serum
+albumin (needed for triage). The tests and their fields are in
+`src/investigations/investigation-tests.ts`; `GET /investigation-tests` serves them to the app.
+Blood group is not here: it is already on the medical profile.
+
+- **One result = one test on one date.** Repeat tests are new results, so the history is always
+  kept. `GET /patients/:patientId/investigations` returns every test with its results, newest test
+  date first; the app shows the first 2-3 side by side for the trend.
+- **WNL quick entry** (`wnl: true`, no values) for LFT, TFT, ECG and imaging. Imaging still names
+  the study (e.g. "Chest X-ray").
+- **Never edited or deleted.** A wrong result is retracted with a reason
+  (`POST .../:resultId/retract`): kept, audited, and hidden from the grid unless
+  `?includeRetracted=true`. The right value is entered as a new result.
+- **Red flags only against approved ranges.** An admin enters the clinical team's normal ranges
+  with `PUT /admin/investigation-ranges`; the list starts empty and nothing is flagged until a
+  range exists. Results are checked against the range in force when they are read, so a newly
+  approved range also flags older results. An abnormal ECG is always flagged.
+- The `min`/`max` on each field only catch typing mistakes (Hb 110 instead of 11.0); they are
+  not clinical limits.
+- Doctors only (linked patients), like the medical profile. Reads and changes are audited, and a
+  read that can't be audited fails.
+
+Waiting on the client: the normal ranges (and whether they differ by age or sex), the eGFR formula
+(creatinine is stored, eGFR is not worked out yet), and what "Free text medication assigned" means.
+Hb, albumin, HbA1c and creatinine are marked `feedsTriage` for the triage work.

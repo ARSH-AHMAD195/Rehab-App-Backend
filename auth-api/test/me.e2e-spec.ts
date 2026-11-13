@@ -21,6 +21,7 @@ describe('Identity and own profile', () => {
         name: 'Dr Meera Nair',
         email: doctor.email,
         emailVerified: true,
+        loginMethod: 'PASSWORD',
         active: true,
       });
     });
@@ -141,9 +142,24 @@ describe('Identity and own profile', () => {
       }
     });
 
-    it('400 for a bad phone, an unknown time zone, or a null name', async () => {
+    it('sets the app language: English by default, Hindi when chosen', async () => {
       const patient = await t.seed({ role: 'PATIENT', name: 'P' });
-      for (const body of [{ phone: '98765' }, { timeZone: 'Mars/Olympus' }, { name: null }, { name: '' }]) {
+      const before = await api().get('/api/v1/users/me/profile').set('Authorization', t.auth(patient)).expect(200);
+      expect(before.body.preferredLanguage).toBe('en');
+
+      const res = await api()
+        .patch('/api/v1/users/me/profile')
+        .set('Authorization', t.auth(patient))
+        .send({ preferredLanguage: 'hi' })
+        .expect(200);
+      expect(res.body.preferredLanguage).toBe('hi');
+      const audit = await t.connection.collection('auditLogs').findOne({ action: 'PROFILE_UPDATED' });
+      expect(audit).toMatchObject({ before: { preferredLanguage: 'en' }, after: { preferredLanguage: 'hi' } });
+    });
+
+    it('400 for a bad phone, an unknown time zone, a null name or an unknown language', async () => {
+      const patient = await t.seed({ role: 'PATIENT', name: 'P' });
+      for (const body of [{ phone: '98765' }, { timeZone: 'Mars/Olympus' }, { name: null }, { name: '' }, { preferredLanguage: 'fr' }]) {
         await api().patch('/api/v1/users/me/profile').set('Authorization', t.auth(patient)).send(body).expect(400);
       }
     });
