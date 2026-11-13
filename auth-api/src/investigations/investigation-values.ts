@@ -52,6 +52,8 @@ export function checkValues(
     if (field.kind === 'number') {
       if (typeof value !== 'number' || !Number.isFinite(value)) {
         details.push({ field: path, code: DETAIL_CODES.WRONG_SHAPE, issue: `must be a number (${field.unit})` });
+      } else if (field.integer && !Number.isInteger(value)) {
+        details.push({ field: path, code: DETAIL_CODES.WRONG_SHAPE, issue: 'must be a whole number' });
       } else if (value < field.min || value > field.max) {
         details.push({
           field: path,

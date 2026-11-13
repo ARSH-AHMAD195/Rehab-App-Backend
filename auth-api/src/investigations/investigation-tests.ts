@@ -15,11 +15,13 @@ export const INVESTIGATION_GROUPS = {
   HAEMATOLOGY: 'HAEMATOLOGY',
   BIOCHEMISTRY: 'BIOCHEMISTRY',
   CARDIAC_RESPIRATORY_IMAGING: 'CARDIAC_RESPIRATORY_IMAGING',
+  /** Not lab tests, but dated scores with a history, which triage and the "MUST rise" alert need. */
+  NUTRITION_SCREENING: 'NUTRITION_SCREENING',
 } as const;
 export type InvestigationGroup = (typeof INVESTIGATION_GROUPS)[keyof typeof INVESTIGATION_GROUPS];
 
 export type FieldDef =
-  | { key: string; label: string; kind: 'number'; unit: string; min: number; max: number; required?: boolean }
+  | { key: string; label: string; kind: 'number'; unit: string; min: number; max: number; required?: boolean; integer?: boolean }
   | { key: string; label: string; kind: 'text'; maxLength: number; required?: boolean; alsoWithWnl?: boolean }
   | { key: string; label: string; kind: 'choice'; options: readonly string[]; abnormal?: readonly string[]; required?: boolean };
 
@@ -92,10 +94,10 @@ export const INVESTIGATION_TESTS: readonly TestDef[] = [
     code: 'CREATININE',
     label: 'Serum creatinine',
     group: 'BIOCHEMISTRY',
-    fields: [num('value', 'Creatinine', 'mg/dL', 0.1, 30)],
+    fields: [num('value', 'Creatinine', 'mg/dL', 0.1, 30), num('egfr', 'eGFR (as reported by the lab)', 'mL/min/1.73m²', 1, 200, false)],
     allowWnl: false,
     feedsTriage: true,
-    note: 'eGFR will be worked out from this once the clinic confirms the formula.',
+    note: 'Enter eGFR as the lab reports it; triage uses it. The app does not work it out itself until the clinic names a formula.',
   },
   {
     code: 'ELECTROLYTES',
@@ -171,6 +173,25 @@ export const INVESTIGATION_TESTS: readonly TestDef[] = [
     ],
     allowWnl: true,
     feedsTriage: false,
+  },
+
+  // ------------------------------------------------------------ nutrition screening
+  {
+    code: 'MUST',
+    label: 'Nutrition score (MUST)',
+    group: 'NUTRITION_SCREENING',
+    fields: [{ key: 'score', label: 'MUST score', kind: 'number', unit: 'points', min: 0, max: 6, integer: true }],
+    allowWnl: false,
+    feedsTriage: true,
+  },
+  {
+    code: 'PG_SGA',
+    label: 'Nutrition score (PG-SGA)',
+    group: 'NUTRITION_SCREENING',
+    fields: [{ key: 'score', label: 'PG-SGA score', kind: 'number', unit: 'points', min: 0, max: 50, integer: true }],
+    allowWnl: false,
+    feedsTriage: false,
+    note: "Recorded for the doctor. The client's triage table uses MUST only.",
   },
 ];
 

@@ -17,7 +17,15 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { BLOOD_GROUPS, CONDITIONS, PHONE_PATTERN, SEXES, SMOKING_STATUSES, WEIGHT_KG_RANGE } from '../common/constants';
+import {
+  BLOOD_GROUPS,
+  CONDITIONS,
+  IHD_STATUSES,
+  PHONE_PATTERN,
+  SEXES,
+  SMOKING_STATUSES,
+  WEIGHT_KG_RANGE,
+} from '../common/constants';
 import { MedicalField } from './medical-profile.schema';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -197,6 +205,33 @@ export class UpdateMedicalProfileDto {
   @IsString()
   @MaxLength(200)
   otherConditions?: string | null;
+
+  // ------------------------------------------------ extra triage inputs
+
+  @ApiPropertyOptional({ example: '2026-10-01', nullable: true, description: 'Former smokers: when they quit. Not in the future.' })
+  @IsOptional()
+  @Matches(DATE, { message: DATE_ISSUE })
+  smokingQuitDate?: string | null;
+
+  @ApiPropertyOptional({ example: true, nullable: true, description: 'Hypertension controlled on medication' })
+  @IsOptional()
+  @IsBoolean()
+  hypertensionOnMedication?: boolean | null;
+
+  @ApiPropertyOptional({ enum: IHD_STATUSES, nullable: true, description: 'Ischaemic heart disease; null if none' })
+  @IsOptional()
+  @IsIn(IHD_STATUSES)
+  ihdStatus?: string | null;
+
+  @ApiPropertyOptional({ example: '2026-06-15', nullable: true, description: 'Last MI or stent. Not in the future.' })
+  @IsOptional()
+  @Matches(DATE, { message: DATE_ISSUE })
+  lastMiOrStentDate?: string | null;
+
+  @ApiPropertyOptional({ example: true, nullable: true, description: 'Can climb 2 flights of stairs (false = under 4 METs)' })
+  @IsOptional()
+  @IsBoolean()
+  canClimbTwoFlights?: boolean | null;
 }
 
 // Compile-time only: the DTO's fields (besides version) are exactly the schema's MEDICAL_FIELDS.

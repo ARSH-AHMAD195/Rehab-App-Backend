@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   BLOOD_GROUPS,
   CONDITIONS,
+  IHD_STATUSES,
   INVITATION_STATUS,
   LANGUAGES,
   LOGIN_METHODS,
@@ -54,6 +55,12 @@ export class ProfileResponseDoc {
   @ApiProperty({ type: String, nullable: true, example: TIME }) updatedAt!: string | null;
 }
 
+export class TriageSummaryDoc {
+  @ApiProperty({ enum: ['HIGH', 'MEDIUM', 'LOW'] }) tag!: string;
+  @ApiProperty({ description: 'true until the clinical team confirms the triage rules' }) provisional!: boolean;
+  @ApiProperty({ description: 'false when some input was missing; GET /patients/:id/triage says which' }) complete!: boolean;
+}
+
 export class PatientResponseDoc {
   @ApiProperty() id!: string;
   @ApiProperty({ example: 'Rajesh Iyer' }) name!: string;
@@ -65,6 +72,7 @@ export class PatientResponseDoc {
   @ApiProperty({ type: [DoctorRefDoc] }) doctors!: DoctorRefDoc[];
   @ApiProperty({ type: String, nullable: true, example: '2026-11-20', description: 'From the medical profile' }) plannedSurgeryDate!: string | null;
   @ApiProperty({ type: Number, nullable: true, example: 10, description: "Days from the patient's today; 0 on the day, negative after" }) daysToSurgery!: number | null;
+  @ApiProperty({ type: TriageSummaryDoc }) triage!: TriageSummaryDoc;
   @ApiProperty({ type: String, nullable: true, example: TIME }) createdAt!: string | null;
 }
 
@@ -153,6 +161,11 @@ export class MedicalProfileResponseDoc {
   @ApiProperty({ type: Boolean, nullable: true, example: false }) anaemia!: boolean | null;
   @ApiProperty({ enum: CONDITIONS, isArray: true, nullable: true, example: ['HTN', 'DM'] }) conditions!: string[] | null;
   @ApiProperty({ type: String, nullable: true, example: 'Hypothyroidism' }) otherConditions!: string | null;
+  @ApiProperty({ type: String, nullable: true, example: '2026-10-01' }) smokingQuitDate!: string | null;
+  @ApiProperty({ type: Boolean, nullable: true, example: true }) hypertensionOnMedication!: boolean | null;
+  @ApiProperty({ enum: IHD_STATUSES, nullable: true }) ihdStatus!: string | null;
+  @ApiProperty({ type: String, nullable: true, example: '2026-06-15' }) lastMiOrStentDate!: string | null;
+  @ApiProperty({ type: Boolean, nullable: true, example: true, description: 'false = under 4 METs' }) canClimbTwoFlights!: boolean | null;
   @ApiProperty({ type: Number, nullable: true, example: 64, description: 'Worked out from dateOfBirth; read-only' }) age!: number | null;
   @ApiProperty({ type: Number, nullable: true, example: 23.2, description: 'onboardingWeightKg / height in metres squared, 1 decimal; read-only' }) bmi!: number | null;
   @ApiProperty({ type: Number, nullable: true, example: 10, description: "Days from the patient's today to plannedSurgeryDate; negative after; read-only" }) daysToSurgery!: number | null;

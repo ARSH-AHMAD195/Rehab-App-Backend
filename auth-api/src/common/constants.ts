@@ -55,6 +55,9 @@ export const AUDIT_ACTIONS = {
   INVESTIGATION_RETRACTED: 'INVESTIGATION_RETRACTED',
   INVESTIGATIONS_VIEWED: 'INVESTIGATIONS_VIEWED',
   INVESTIGATION_RANGE_CHANGED: 'INVESTIGATION_RANGE_CHANGED',
+  /** Triage: a doctor reading one patient's tag with its reasons, and rule changes. */
+  TRIAGE_VIEWED: 'TRIAGE_VIEWED',
+  TRIAGE_RULES_CHANGED: 'TRIAGE_RULES_CHANGED',
 } as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
 
@@ -130,6 +133,13 @@ export const SMOKING_STATUSES = ['NEVER', 'FORMER', 'CURRENT'] as const;
  * disease, smoking, other. OTHER's details go in otherConditions.
  */
 export const CONDITIONS = ['HTN', 'DM', 'CKD', 'IHD', 'SMOKING', 'OTHER'] as const;
+
+/**
+ * Ischaemic heart disease, for triage: STABLE (Medium) or SYMPTOMATIC
+ * (High), as the client's table words it. An MI or stent in the last
+ * 6 months is a separate date field (lastMiOrStentDate).
+ */
+export const IHD_STATUSES = ['STABLE', 'SYMPTOMATIC'] as const;
 
 /** Onboarding weight, kg: the same data-entry limits as the daily weight vital. */
 export const WEIGHT_KG_RANGE = { min: 20, max: 250 } as const;

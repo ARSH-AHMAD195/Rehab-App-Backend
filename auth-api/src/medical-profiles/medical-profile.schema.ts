@@ -48,6 +48,18 @@ export class MedicalProfile {
   @Prop({ type: [String], default: null }) conditions!: string[] | null;
   @Prop({ type: String, default: null }) otherConditions!: string | null;
 
+  // Extra triage inputs the client's table needs (Nov 2026).
+  /** Former smokers: quitting less than 8 weeks ago is a Medium triage parameter. */
+  @Prop({ type: String, default: null }) smokingQuitDate!: string | null;
+  /** Hypertension "controlled on medication" (a Medium triage parameter). */
+  @Prop({ type: Boolean, default: null }) hypertensionOnMedication!: boolean | null;
+  /** IHD_STATUSES; null = no ischaemic heart disease recorded. */
+  @Prop({ type: String, default: null }) ihdStatus!: string | null;
+  /** Last myocardial infarction or stent; within 6 months is High. */
+  @Prop({ type: String, default: null }) lastMiOrStentDate!: string | null;
+  /** Functional capacity: false means under 4 METs (High). */
+  @Prop({ type: Boolean, default: null }) canClimbTwoFlights!: boolean | null;
+
   /** Optimistic concurrency: PATCH sends the version it read. */
   @Prop({ required: true, default: 1 })
   version!: number;
@@ -94,6 +106,11 @@ const FIELD_SET: Record<
   anaemia: true,
   conditions: true,
   otherConditions: true,
+  smokingQuitDate: true,
+  hypertensionOnMedication: true,
+  ihdStatus: true,
+  lastMiOrStentDate: true,
+  canClimbTwoFlights: true,
 };
 export type MedicalField = keyof typeof FIELD_SET;
 export const MEDICAL_FIELDS = Object.keys(FIELD_SET) as MedicalField[];
