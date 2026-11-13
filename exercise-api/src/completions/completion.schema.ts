@@ -10,6 +10,8 @@ export const SKIP_SLOT = -1;
 export class CompletionDetails {
   @Prop({ type: Number, default: null }) durationMin!: number | null;
   @Prop({ type: String, default: null }) note!: string | null;
+  /** Incentive spirometry: the volume reached, in mL. Only on exercises that record a volume. */
+  @Prop({ type: Number, default: null }) volumeMl!: number | null;
 }
 const CompletionDetailsSchema = SchemaFactory.createForClass(CompletionDetails);
 
