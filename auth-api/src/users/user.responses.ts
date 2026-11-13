@@ -5,6 +5,7 @@ import { ROLES } from '../common/constants';
 import { DEFAULT_DISPLAY_TIME_ZONE, toLocalIso, todayIn } from '../common/time';
 import { daysUntil } from '../medical-profiles/derived';
 import { MedicalProfile } from '../medical-profiles/medical-profile.schema';
+import { TriageService, TriageSummary } from '../triage/triage.service';
 import { UserDocument } from './user.schema';
 import { UsersService } from './users.service';
 
@@ -40,6 +41,8 @@ export interface PatientResponse {
   plannedSurgeryDate: string | null;
   /** Whole days from the patient's today; negative once surgery has passed. */
   daysToSurgery: number | null;
+  /** HIGH / MEDIUM / LOW, worked out now; GET /patients/:id/triage gives the reasons. */
+  triage: TriageSummary;
   createdAt: string | null;
 }
 
@@ -71,6 +74,7 @@ export class UserResponses {
   constructor(
     private readonly users: UsersService,
     @InjectModel(MedicalProfile.name) private readonly profiles: Model<MedicalProfile>,
+    private readonly triage: TriageService,
   ) {}
 
   async profile(user: UserDocument): Promise<ProfileResponse> {
@@ -98,13 +102,14 @@ export class UserResponses {
     const doctorIds = [...new Set(users.flatMap((u) => u.doctorIds.map(String)))].map(
       (id) => new Types.ObjectId(id),
     );
-    const [names, profiles] = await Promise.all([
+    const [names, profiles, triage] = await Promise.all([
       this.users.doctorNames(doctorIds),
       users.length
         ? this.profiles
             .find({ patientId: { $in: users.map((u) => u._id) } }, { patientId: 1, plannedSurgeryDate: 1 })
             .lean()
         : Promise.resolve([]),
+      this.triage.summaries(users),
     ]);
     const surgeryById = new Map(profiles.map((p) => [String(p.patientId), p.plannedSurgeryDate ?? null]));
 
@@ -114,6 +119,7 @@ export class UserResponses {
         ...this.patientBase(user, names),
         plannedSurgeryDate,
         daysToSurgery: daysUntil(plannedSurgeryDate, todayIn(user.timeZone || DEFAULT_DISPLAY_TIME_ZONE)),
+        triage: triage.get(String(user._id))!,
         createdAt: toLocalIso(user.createdAt, user.timeZone),
       };
     });

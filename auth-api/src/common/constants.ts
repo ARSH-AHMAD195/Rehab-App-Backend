@@ -15,6 +15,8 @@ export const ERROR_CODES = {
   PHONE_ALREADY_EXISTS: 'PHONE_ALREADY_EXISTS',
   /** Login code wrong, expired, used up, or no such patient - deliberately one answer for all. */
   INVALID_LOGIN_CODE: 'INVALID_LOGIN_CODE',
+  /** Same code and meaning as Health Monitoring's alert inbox. */
+  ALERT_ALREADY_ACKNOWLEDGED: 'ALERT_ALREADY_ACKNOWLEDGED',
   DOCTOR_HAS_PATIENTS: 'DOCTOR_HAS_PATIENTS',
   USER_INACTIVE: 'USER_INACTIVE',
   CONCURRENT_UPDATE: 'CONCURRENT_UPDATE',
@@ -55,6 +57,10 @@ export const AUDIT_ACTIONS = {
   INVESTIGATION_RETRACTED: 'INVESTIGATION_RETRACTED',
   INVESTIGATIONS_VIEWED: 'INVESTIGATIONS_VIEWED',
   INVESTIGATION_RANGE_CHANGED: 'INVESTIGATION_RANGE_CHANGED',
+  /** Triage: a doctor reading one patient's tag with its reasons, and rule changes. */
+  TRIAGE_VIEWED: 'TRIAGE_VIEWED',
+  TRIAGE_RULES_CHANGED: 'TRIAGE_RULES_CHANGED',
+  CARE_ALERT_ACKNOWLEDGED: 'CARE_ALERT_ACKNOWLEDGED',
 } as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
 
@@ -115,6 +121,36 @@ export const LOGIN_CODE = {
 export const LOGIN_METHODS = { PASSWORD: 'PASSWORD', LOGIN_CODE: 'LOGIN_CODE' } as const;
 export type LoginMethod = (typeof LOGIN_METHODS)[keyof typeof LOGIN_METHODS];
 
+/**
+ * Care-team alerts (client change request, section 3.3). The percentages and
+ * days are the client's; `recentDays` is how far back a result or vital still
+ * counts as "new", so switching alerts on doesn't flood doctors with old data.
+ */
+export const CARE_ALERTS = {
+  /** Weight loss of MORE than this percentage since the onboarding weight. */
+  WEIGHT_LOSS_PERCENT: 5,
+  /** No logging for this many days or more. */
+  NO_LOGGING_DAYS: 3,
+  /** Investigation results taken in the last N days can raise a "new High value" alert. */
+  RECENT_DAYS: 14,
+  /**
+   * Intake below this percentage of the CALORIE target on each of the last N
+   * finished days, every one of them logged. ⏳ Client question 17: calories,
+   * protein, either or both, and whether unlogged days count.
+   */
+  NUTRITION_LOW_PERCENT: 75,
+  NUTRITION_LOW_DAYS: 3,
+} as const;
+
+export const CARE_ALERT_KINDS = {
+  HIGH_VALUE: 'HIGH_VALUE',
+  WEIGHT_LOSS: 'WEIGHT_LOSS',
+  MUST_RISE: 'MUST_RISE',
+  NO_LOGGING: 'NO_LOGGING',
+  NUTRITION_LOW: 'NUTRITION_LOW',
+} as const;
+export type CareAlertKind = (typeof CARE_ALERT_KINDS)[keyof typeof CARE_ALERT_KINDS];
+
 /** Patient app language. Content in Hindi arrives with the translations. */
 export const LANGUAGES = ['en', 'hi'] as const;
 export type Language = (typeof LANGUAGES)[number];
@@ -130,6 +166,13 @@ export const SMOKING_STATUSES = ['NEVER', 'FORMER', 'CURRENT'] as const;
  * disease, smoking, other. OTHER's details go in otherConditions.
  */
 export const CONDITIONS = ['HTN', 'DM', 'CKD', 'IHD', 'SMOKING', 'OTHER'] as const;
+
+/**
+ * Ischaemic heart disease, for triage: STABLE (Medium) or SYMPTOMATIC
+ * (High), as the client's table words it. An MI or stent in the last
+ * 6 months is a separate date field (lastMiOrStentDate).
+ */
+export const IHD_STATUSES = ['STABLE', 'SYMPTOMATIC'] as const;
 
 /** Onboarding weight, kg: the same data-entry limits as the daily weight vital. */
 export const WEIGHT_KG_RANGE = { min: 20, max: 250 } as const;

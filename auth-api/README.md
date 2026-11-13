@@ -205,3 +205,53 @@ Blood group is not here: it is already on the medical profile.
 Waiting on the client: the normal ranges (and whether they differ by age or sex), the eGFR formula
 (creatinine is stored, eGFR is not worked out yet), and what "Free text medication assigned" means.
 Hb, albumin, HbA1c and creatinine are marked `feedsTriage` for the triage work.
+
+### 9. Triage tag (HIGH / MEDIUM / LOW)
+From the client's table (change request, Nov 2026, section 3). The rules are a pure, separately
+tested function in `src/triage/triage-rules.ts`; the numbers are a versioned setting.
+
+- **Worked out on every read**, from the medical profile, the newest active investigation results
+  (Hb, albumin, MUST, HbA1c, lab-reported eGFR on the creatinine result) and the newest pulse and
+  BP in Health Monitoring's daily vitals (last 7 days, read-only). So it is never stale, whoever
+  entered the value.
+- `GET /patients/:patientId/triage` (doctor, audited): the tag, each reason with its value and
+  date, and `missing` (what could not count). The patient list shows `triage: { tag, provisional,
+  complete }` on every patient.
+- **Missing data never raises the tag**; it is listed instead. Condition-specific values (HbA1c,
+  eGFR, IHD status, BP medication, last chemo date) are only "missing" when that condition is ticked.
+- **Provisional until confirmed.** Version 1 of the rules is the client's table, added on first
+  start with `confirmed: false`, and every tag says `provisional: true`. Once the clinical team
+  answers, an admin saves the confirmed numbers with `PUT /admin/triage-rules`; old versions are
+  kept and the change is audited.
+
+How the open boundaries were read (all changeable in the setting): age 60-70 Medium with 70
+included, over 70 High; Hb 8 to under 11 Medium; albumin 3.0 to under 3.5 Medium; HbA1c 7-8.5
+Medium with 8.5 included; eGFR 30 to under 60 Medium; pulse 90-100 Medium; BP High at 180
+systolic OR 110 diastolic; quit smoking under 56 days ago Medium; MI/stent within 183 days High;
+chemo within 28 days Medium. eGFR is taken as the lab reports it, not calculated.
+
+New onboarding fields for triage: `smokingQuitDate`, `hypertensionOnMedication`, `ihdStatus`
+(STABLE/SYMPTOMATIC), `lastMiOrStentDate`, `canClimbTwoFlights`. MUST and PG-SGA scores are
+entered as dated investigations, so their history is kept.
+
+### 10. Care-team alerts
+Client change request, section 3.3. Every doctor linked to a patient sees the same alerts, in
+`GET /doctor/care-alerts` (with `openCount` for a badge), and any of them can acknowledge one,
+once (`PATCH /doctor/care-alerts/:alertId`, audited; `409 ALERT_ALREADY_ACKNOWLEDGED` after that).
+
+| Alert | When |
+|---|---|
+| `HIGH_VALUE` | An investigation result in the last 14 days, or a pulse/BP in the triage vitals window, at a **triage High cut-off** (Hb, albumin, HbA1c, eGFR, MUST, pulse, BP) - so alerts and the tag always agree |
+| `WEIGHT_LOSS` | The newest weight is **more than 5%** below `onboardingWeightKg`. One open at a time |
+| `MUST_RISE` | The newest MUST score is higher than the one before |
+| `NO_LOGGING` | No vitals, no exercise ticked or skipped and no meals logged for **3 days or more** (counted from registration if they never logged) |
+| `NUTRITION_LOW` | Intake below **75% of the calorie target** on each of the last **3 finished days**, every one of them logged (meals from Health Monitoring, read-only). One open at a time. Calories only, until the client says otherwise |
+
+**Checked when the inbox is opened**, from the data as it is then (`src/care-alerts/care-alert-rules.ts`,
+unit tested). So the inbox is always current, with no background job and no always-on server.
+Each alert has a key naming what it is about (this Hb result, this day's pulse); there is one
+alert per key, so nothing is raised twice and an acknowledged alert never comes back for the same
+reading. Other vitals (SpO2, temperature...) keep alerting through Health Monitoring's own limits.
+
+Not yet: sending alerts out (push/SMS/WhatsApp) - that needs the client's choice of channel, and a
+timer (and an always-on server) so alerts go out when nobody has the app open.

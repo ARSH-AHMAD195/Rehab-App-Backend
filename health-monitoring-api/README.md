@@ -217,3 +217,31 @@ These are the clinical and product answers the module is waiting on. None of the
 4. Mood labels for levels 1, 2, 3, 5 — **frontend**
 5. Can patients correct a previous day? (read-only for now) — **clinical team**
 6. Should a day be COMPLETE without optional blood sugar? — **frontend**
+
+## Nutrition (diet chart and meal logging)
+Client change request, Nov 2026, section 5. Code in `src/nutrition/`.
+
+- **The chart:** the hospital's "High-calorie, High-protein Diet for Cancer Patients"
+  (`diet-chart.ts`): 7 meal slots with times, "or" options and "+" add-ons with their quantities,
+  and calories and protein **per slot**, as on the chart. Default target: 2206 kcal and 82.4 g
+  protein. Labels are `{ en, hi }`; `hi` stays null until the client supplies translations.
+- **Each patient's plan:** `GET /me/diet-plan`. Until a doctor changes it, it is the hospital chart
+  (`version: 0`, nothing stored). `PATCH /doctor/patients/:patientId/diet-plan` (send `version`)
+  changes targets, diet type or the slots and options; audited.
+- **Logging:** `PUT /me/meals/today/:slot { date, optionCodes }` sets what was eaten in one slot
+  (`[]` clears it). Only today (`409 DAY_CHANGED` otherwise); the same choice again changes nothing.
+  One `mealLogs` document per patient per day stores each slot's values as logged, so a later
+  plan change never rewrites past days.
+- **Totals:** `GET /me/meals/today` gives each slot with its options ticked or not, the day's
+  calories and protein, and `percent` of each target for the progress bar. `GET /me/meals` gives
+  one row per day (default 7, at most 90). Doctors have the same under
+  `/doctor/patients/:patientId/meals...`, audited.
+
+Assumptions until the client answers (question 15): **a slot counts its full calories and protein
+once anything in it is ticked**, because the chart gives values per slot only; add-ons don't add
+extra; there is no "half eaten". To check with the dietitian: the breakfast row's option-to-quantity
+mapping, and the daily total (the slots add up to 2207 kcal; the chart says 2206).
+
+The "intake below 75% for 3 days" alert lives with the other care-team alerts in the Auth API,
+which reads `mealLogs` read-only. Not yet: food and measure photos, meal reminders (best done as
+local notifications on the phone).

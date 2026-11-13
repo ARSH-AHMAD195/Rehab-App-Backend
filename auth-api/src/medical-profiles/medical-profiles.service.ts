@@ -131,7 +131,7 @@ export class MedicalProfilesService {
    */
   private assertDates(dto: UpdateMedicalProfileDto, patient: UserDocument): void {
     const details: ErrorDetail[] = [];
-    for (const field of ['dateOfBirth', 'plannedSurgeryDate', 'programmeStartDate', 'lastChemoDate'] as const) {
+    for (const field of ['dateOfBirth', 'plannedSurgeryDate', 'programmeStartDate', 'lastChemoDate', 'smokingQuitDate', 'lastMiOrStentDate'] as const) {
       const value = dto[field];
       if (value && !DateTime.fromISO(value).isValid) {
         details.push({ field, code: DETAIL_CODES.WRONG_SHAPE, issue: 'is not a real calendar date' });
@@ -144,8 +144,11 @@ export class MedicalProfilesService {
         details.push({ field: 'dateOfBirth', code: DETAIL_CODES.OUT_OF_RANGE, issue: 'must be in the past, age 0-120' });
       }
     }
-    if (dto.lastChemoDate && DateTime.fromISO(dto.lastChemoDate).isValid && dto.lastChemoDate > this.today(patient)) {
-      details.push({ field: 'lastChemoDate', code: DETAIL_CODES.OUT_OF_RANGE, issue: 'cannot be in the future' });
+    for (const field of ['lastChemoDate', 'smokingQuitDate', 'lastMiOrStentDate'] as const) {
+      const value = dto[field];
+      if (value && DateTime.fromISO(value).isValid && value > this.today(patient)) {
+        details.push({ field, code: DETAIL_CODES.OUT_OF_RANGE, issue: 'cannot be in the future' });
+      }
     }
     if (details.length) throw new ValidationFailedException(details);
   }

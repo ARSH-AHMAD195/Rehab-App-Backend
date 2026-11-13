@@ -23,6 +23,7 @@ import { ThresholdsModule } from './thresholds/thresholds.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { DailyLogsModule } from './daily-logs/daily-logs.module';
 import { AdminModule } from './admin/admin.module';
+import { NutritionModule } from './nutrition/nutrition.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { AdminModule } from './admin/admin.module';
     AlertsModule,
     DailyLogsModule,
     AdminModule,
+    NutritionModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

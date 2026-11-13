@@ -114,7 +114,7 @@ export async function createTestApp(overrides: ProviderOverride[] = []): Promise
     async reset() {
       // Parameters are left in place: they are reference data the app seeds on
       // boot, not per-test state.
-      for (const name of ['users', 'dailyLogs', 'vitalAlerts', 'alertThresholds', 'auditLogs', 'outboxEvents', 'idempotencyKeys']) {
+      for (const name of ['users', 'dailyLogs', 'vitalAlerts', 'alertThresholds', 'auditLogs', 'outboxEvents', 'idempotencyKeys', 'mealLogs', 'patientDietPlans']) {
         await connection.collection(name).deleteMany({});
       }
     },

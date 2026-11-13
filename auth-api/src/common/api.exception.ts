@@ -88,6 +88,12 @@ export class InvalidLoginCodeException extends ApiException {
   }
 }
 
+export class AlertAlreadyAcknowledgedException extends ApiException {
+  constructor() {
+    super(HttpStatus.CONFLICT, ERROR_CODES.ALERT_ALREADY_ACKNOWLEDGED, 'This alert has already been acknowledged');
+  }
+}
+
 export class DoctorHasPatientsException extends ApiException {
   constructor(count: number) {
     super(

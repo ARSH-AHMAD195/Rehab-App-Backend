@@ -9,6 +9,7 @@ import { Role } from '../../src/common/constants';
 import { validationExceptionFactory } from '../../src/common/validation-exception.factory';
 import { EmailAlreadyExistsException, UnauthenticatedException } from '../../src/common/api.exception';
 import { IDENTITY_PROVIDER, IdentityProvider, VerifiedToken } from '../../src/identity/identity-provider';
+import { TriageService } from '../../src/triage/triage.service';
 
 /**
  * Stands in for Firebase. The bearer token in tests IS the uid.
@@ -205,9 +206,11 @@ export async function createTestApp(): Promise<TestContext> {
       return doc!.firebaseUid as string;
     },
     async reset() {
-      for (const name of ['users', 'medicalProfiles', 'auditLogs', 'loginCodes', 'investigations', 'investigationRanges']) {
+      for (const name of ['users', 'medicalProfiles', 'auditLogs', 'loginCodes', 'investigations', 'investigationRanges', 'triageRules', 'dailyLogs', 'careAlerts', 'exerciseCompletions', 'mealLogs']) {
         await connection.collection(name).deleteMany({});
       }
+      // As on a fresh start: the client's triage table as version 1.
+      await app.get(TriageService).onModuleInit();
       identity.reset();
     },
     async close() {

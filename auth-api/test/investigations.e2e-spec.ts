@@ -39,6 +39,7 @@ describe('Investigations (PAC grid)', () => {
       'HB', 'TLC', 'DLC', 'PLATELETS', 'PT_INR',
       'BLOOD_SUGAR', 'HBA1C', 'UREA', 'CREATININE', 'ELECTROLYTES', 'LFT', 'ALBUMIN', 'TFT', 'ABG',
       'ECG', 'ECHO', 'PFT', 'IMAGING',
+      'MUST', 'PG_SGA',
     ]);
     const hb = res.body.data[0];
     expect(hb).toMatchObject({ label: 'Haemoglobin (Hb)', group: 'HAEMATOLOGY', allowWnl: false, feedsTriage: true });
@@ -62,7 +63,7 @@ describe('Investigations (PAC grid)', () => {
     });
 
     const res = await grid().expect(200);
-    expect(res.body.tests).toHaveLength(18);
+    expect(res.body.tests).toHaveLength(20);
     expect(row(res.body, 'HB').results.map((r) => r.values)).toEqual([{ value: 10.1 }, { value: 9.2 }, { value: 8.6 }]);
     expect(row(res.body, 'HB').results[0]).toMatchObject({ comment: 'After iron infusion' });
     expect(row(res.body, 'ALBUMIN').results).toEqual([]);
