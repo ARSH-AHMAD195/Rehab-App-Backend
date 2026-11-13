@@ -105,7 +105,22 @@ export class CompletionsService implements OnModuleInit {
       // Nothing is left to skip once it's all done, either.
       if (free === undefined) throw new ExerciseAlreadyDoneException(item.schedule.timesPerDay);
 
-      const details = dto.details ? { durationMin: dto.details.durationMin ?? null, note: dto.details.note || null } : null;
+      const volumeMl = dto.details?.volumeMl ?? null;
+      if (volumeMl !== null) {
+        const exercise = (await this.exercises.findForPlan([item.exerciseId], session)).get(String(item.exerciseId));
+        if (!exercise?.recordsVolume) {
+          throw new ValidationFailedException([
+            {
+              field: 'details.volumeMl',
+              code: DETAIL_CODES.NOT_ALLOWED,
+              issue: 'is only for exercises that record a volume (incentive spirometry)',
+            },
+          ]);
+        }
+      }
+      const details = dto.details
+        ? { durationMin: dto.details.durationMin ?? null, note: dto.details.note || null, volumeMl }
+        : null;
       const [completion] = await this.model.create(
         [
           {
@@ -119,7 +134,7 @@ export class CompletionsService implements OnModuleInit {
             status: skipping ? COMPLETION_STATUS.SKIPPED : COMPLETION_STATUS.DONE,
             skipReason: skipping ? dto.reason : null,
             completedAt: new Date(),
-            details: details && (details.durationMin !== null || details.note !== null) ? details : null,
+            details: details && Object.values(details).some((value) => value !== null) ? details : null,
           },
         ],
         { session },
@@ -287,7 +302,11 @@ export class CompletionsService implements OnModuleInit {
         timesPerDay: times,
         doneCount,
         status,
-        completions: ticks.map((tick) => ({ id: String(tick._id), completedAt: this.day.toLocalIso(tick.completedAt, timeZone)! })),
+        completions: ticks.map((tick) => ({
+          id: String(tick._id),
+          completedAt: this.day.toLocalIso(tick.completedAt, timeZone)!,
+          volumeMl: tick.details?.volumeMl ?? null,
+        })),
         skip: skip
           ? { id: String(skip._id), reason: skip.skipReason ?? '', skippedAt: this.day.toLocalIso(skip.completedAt, timeZone)! }
           : null,
@@ -355,7 +374,9 @@ export class CompletionsService implements OnModuleInit {
         status: row.status ?? COMPLETION_STATUS.DONE,
         reason: row.skipReason ?? null,
         completedAt: this.day.toLocalIso(row.completedAt, timeZone)!,
-        details: row.details ? { durationMin: row.details.durationMin, note: row.details.note } : null,
+        details: row.details
+          ? { durationMin: row.details.durationMin ?? null, note: row.details.note ?? null, volumeMl: row.details.volumeMl ?? null }
+          : null,
       };
     });
   }

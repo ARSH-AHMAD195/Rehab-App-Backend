@@ -1,16 +1,17 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, FilterQuery, Model, Types } from 'mongoose';
-import { AUDIT_ACTIONS, DEFAULT_PAGE_LIMIT, DETAIL_CODES, ROLES, VIDEO_PROVIDERS } from '../common/constants';
+import { AUDIT_ACTIONS, DEFAULT_PAGE_LIMIT, DETAIL_CODES, ROLES, SPIROMETRY, VIDEO_PROVIDERS } from '../common/constants';
 import { ForbiddenRoleException, NotFoundException, ValidationFailedException } from '../common/api.exception';
 import { TransactionRunner } from '../common/mongo/transaction.runner';
 import { decodeCursor, encodeCursor } from '../common/pagination/cursor';
 import { AuditService } from '../audit/audit.service';
 import { AuthUser } from '../users/users.service';
 import { CategoriesService } from '../categories/categories.service';
-import { Exercise, ExerciseDocument, ExerciseVideo } from './exercise.schema';
+import { Exercise, ExerciseDocument, ExerciseHindi, ExerciseVideo } from './exercise.schema';
 import {
   CreateExerciseDto,
+  ExerciseHindiDto,
   ExerciseListResponse,
   ExerciseResponse,
   ListExercisesQueryDto,
@@ -21,7 +22,11 @@ import { VIDEO_CHECKER, VIDEO_PROBLEM_ISSUES, VideoChecker } from './video-check
 import { ExercisePlan } from '../plans/plan.schema';
 
 /** The fields an edit can change, as stored. */
-type ExerciseChanges = Partial<Pick<Exercise, 'name' | 'sortKey' | 'categoryId' | 'description' | 'instructions' | 'video' | 'active'>>;
+type ExerciseChanges = Partial<
+  Pick<Exercise, 'name' | 'sortKey' | 'categoryId' | 'description' | 'instructions' | 'hi' | 'recordsVolume' | 'video' | 'active'>
+>;
+
+const isDuplicateKey = (error: unknown) => (error as { code?: number })?.code === 11000;
 
 @Injectable()
 export class ExercisesService implements OnModuleInit {
@@ -36,6 +41,42 @@ export class ExercisesService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     await this.model.init();
+    await this.seedMissing();
+  }
+
+  /**
+   * Puts incentive spirometry in the library, under Breathing, if it isn't
+   * there yet. Name only: the steps, video and Hindi text come from the
+   * clinic, added like any other edit. Once there it is never touched again,
+   * so an admin's edits (or deactivating it) stick.
+   */
+  async seedMissing(): Promise<void> {
+    const breathing = await this.categories.findByCode(SPIROMETRY.CATEGORY);
+    if (!breathing) return;
+    try {
+      await this.model.updateOne(
+        { code: SPIROMETRY.CODE },
+        {
+          $setOnInsert: {
+            code: SPIROMETRY.CODE,
+            name: SPIROMETRY.NAME,
+            sortKey: SPIROMETRY.NAME.toLowerCase(),
+            categoryId: breathing._id,
+            description: null,
+            instructions: [],
+            hi: null,
+            recordsVolume: true,
+            video: null,
+            active: true,
+            createdBy: null,
+          },
+        },
+        { upsert: true },
+      );
+    } catch (error) {
+      // Another instance added it at the same moment, which is fine.
+      if (!isDuplicateKey(error)) throw error;
+    }
   }
 
   async create(dto: CreateExerciseDto, actor: AuthUser): Promise<ExerciseResponse> {
@@ -52,6 +93,8 @@ export class ExercisesService implements OnModuleInit {
             categoryId: category._id,
             description: dto.description || null,
             instructions: dto.instructions ?? [],
+            hi: toHindi(dto.hi),
+            recordsVolume: dto.recordsVolume ?? false,
             video,
             createdBy: { id: new Types.ObjectId(actor.id), role: actor.role },
           },
@@ -207,6 +250,8 @@ export class ExercisesService implements OnModuleInit {
     if (dto.categoryId !== undefined) changes.categoryId = new Types.ObjectId(dto.categoryId);
     if (dto.description !== undefined) changes.description = dto.description || null;
     if (dto.instructions !== undefined) changes.instructions = dto.instructions;
+    if (dto.hi !== undefined) changes.hi = toHindi(dto.hi);
+    if (dto.recordsVolume !== undefined) changes.recordsVolume = dto.recordsVolume;
     if (dto.videoUrl !== undefined) changes.video = dto.videoUrl ? toVideo(dto.videoUrl) : null;
     if (dto.active !== undefined) changes.active = dto.active;
     return changes;
@@ -250,6 +295,13 @@ export class ExercisesService implements OnModuleInit {
       category: categoryCode ?? '',
       description: doc.description,
       instructions: [...doc.instructions],
+      hi: {
+        name: doc.hi?.name ?? null,
+        description: doc.hi?.description ?? null,
+        instructions: [...(doc.hi?.instructions ?? [])],
+      },
+      code: doc.code ?? null,
+      recordsVolume: doc.recordsVolume ?? false,
       video: doc.video
         ? { provider: doc.video.provider, videoId: doc.video.videoId, url: youTubeWatchUrl(doc.video.videoId) }
         : null,
@@ -278,6 +330,13 @@ export class ExercisesService implements OnModuleInit {
       session,
     );
   }
+}
+
+/** As stored: null when nothing is in Hindi yet, so "no Hindi" has one shape. */
+function toHindi(hi: ExerciseHindiDto | null | undefined): ExerciseHindi | null {
+  if (!hi) return null;
+  const stored = { name: hi.name || null, description: hi.description || null, instructions: hi.instructions ?? [] };
+  return stored.name || stored.description || stored.instructions.length ? stored : null;
 }
 
 function toVideo(link: string): ExerciseVideo {

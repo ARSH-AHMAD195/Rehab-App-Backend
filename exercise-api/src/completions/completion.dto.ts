@@ -20,10 +20,11 @@ import {
   CompletionStatus,
   DEFAULT_PAGE_LIMIT,
   MAX_PAGE_LIMIT,
+  SPIROMETRY,
 } from '../common/constants';
 import { trim } from '../categories/category.dto';
 import { IsCalendarDate } from '../time/day.service';
-import { PlanExerciseResponse } from '../plans/plan.dto';
+import { PlanExerciseResponse, PlanTargetValues } from '../plans/plan.dto';
 
 export class CompletionDetailsDto {
   @ApiPropertyOptional({ example: 15, nullable: true })
@@ -33,7 +34,17 @@ export class CompletionDetailsDto {
   @ApiPropertyOptional({ example: 'Felt easy', nullable: true })
   @IsOptional() @Transform(trim) @IsString() @MaxLength(COMPLETION_LIMITS.NOTE)
   note?: string | null;
+
+  @ApiPropertyOptional({
+    example: 1250,
+    nullable: true,
+    description: 'Incentive spirometry: the volume reached, in mL. Only for exercises with recordsVolume.',
+  })
+  @IsOptional() @IsInt() @Min(0) @Max(SPIROMETRY.MAX_VOLUME_ML)
+  volumeMl?: number | null;
 }
+
+export type CompletionDetailValues = { durationMin: number | null; note: string | null; volumeMl: number | null };
 
 /** POST /exercise-completions */
 export class RecordCompletionDto {
@@ -104,7 +115,7 @@ export class CompletionResponse {
   reason!: string | null;
   @ApiProperty({ example: '2026-10-20T08:15:00+05:30', description: 'When it was ticked, or skipped' }) completedAt!: string;
   @ApiProperty({ type: CompletionDetailsDto, nullable: true })
-  details!: { durationMin: number | null; note: string | null } | null;
+  details!: CompletionDetailValues | null;
 }
 
 export class CompletionListResponse {
@@ -115,6 +126,8 @@ export class CompletionListResponse {
 export class ChecklistDoneResponse {
   @ApiProperty() id!: string;
   @ApiProperty({ example: '2026-10-20T08:15:00+05:30' }) completedAt!: string;
+  @ApiProperty({ nullable: true, type: Number, example: null, description: 'Incentive spirometry: the volume reached, in mL' })
+  volumeMl!: number | null;
 }
 
 export class ChecklistSkipResponse {
@@ -133,7 +146,7 @@ export class ChecklistItemResponse {
   completions!: ChecklistDoneResponse[];
   @ApiProperty({ type: ChecklistSkipResponse, nullable: true, description: 'Set when the item was skipped that day' })
   skip!: ChecklistSkipResponse | null;
-  @ApiProperty({ nullable: true }) target!: { sets: number | null; reps: number | null; durationMin: number | null } | null;
+  @ApiProperty({ nullable: true }) target!: PlanTargetValues | null;
   @ApiProperty({ nullable: true, type: String }) notes!: string | null;
 }
 

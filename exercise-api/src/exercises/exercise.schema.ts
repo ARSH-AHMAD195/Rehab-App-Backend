@@ -12,6 +12,15 @@ export class ExerciseVideo {
 }
 const ExerciseVideoSchema = SchemaFactory.createForClass(ExerciseVideo);
 
+/** The Hindi text of an exercise. Each part is optional; the app falls back to English. */
+@Schema({ _id: false })
+export class ExerciseHindi {
+  @Prop({ type: String, default: null }) name!: string | null;
+  @Prop({ type: String, default: null }) description!: string | null;
+  @Prop({ type: [String], default: [] }) instructions!: string[];
+}
+const ExerciseHindiSchema = SchemaFactory.createForClass(ExerciseHindi);
+
 /**
  * One exercise in the library. The content comes from the clinical team; an
  * admin or a doctor enters it.
@@ -46,6 +55,18 @@ export class Exercise {
   @Prop({ type: ExerciseVideoSchema, default: null })
   video!: ExerciseVideo | null;
 
+  /** Null until the clinic supplies the Hindi text. */
+  @Prop({ type: ExerciseHindiSchema, default: null })
+  hi!: ExerciseHindi | null;
+
+  /** Set only on exercises the API adds itself (INCENTIVE_SPIROMETRY), so it can find them again. */
+  @Prop({ type: String, default: null })
+  code!: string | null;
+
+  /** The patient records the volume reached, in mL, with each tick (incentive spirometry). */
+  @Prop({ required: true, default: false })
+  recordsVolume!: boolean;
+
   @Prop({ required: true, default: true })
   active!: boolean;
 
@@ -61,3 +82,4 @@ export type ExerciseDocument = HydratedDocument<Exercise>;
 export const ExerciseSchema = SchemaFactory.createForClass(Exercise);
 ExerciseSchema.index({ active: 1, sortKey: 1, _id: 1 });
 ExerciseSchema.index({ categoryId: 1, active: 1 });
+ExerciseSchema.index({ code: 1 }, { unique: true, partialFilterExpression: { code: { $type: 'string' } } });

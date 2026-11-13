@@ -102,18 +102,20 @@ describe('Exercise plans', () => {
             category: 'STRENGTH',
             description: null,
             instructions: ['Sit upright', 'Straighten one knee slowly'],
+            hi: { name: null, description: null, instructions: [] },
+            recordsVolume: false,
             video: { provider: 'YOUTUBE', videoId: VIDEO_ID, url: `https://www.youtube.com/watch?v=${VIDEO_ID}` },
             active: true,
           },
           schedule: { daysOfWeek: [1, 3, 5], timesPerDay: 1 },
-          target: { sets: 2, reps: 10, durationMin: null },
+          target: { sets: 2, reps: 10, durationMin: null, volumeMl: null },
           notes: 'Stop if pain goes above 5',
         },
         expect.objectContaining({
           exercise: expect.objectContaining({ id: walkId, video: null }),
           // Days come back sorted.
           schedule: { daysOfWeek: [1, 3, 7], timesPerDay: 2 },
-          target: { sets: null, reps: null, durationMin: 20 },
+          target: { sets: null, reps: null, durationMin: 20, volumeMl: null },
           notes: null,
         }),
       ]);

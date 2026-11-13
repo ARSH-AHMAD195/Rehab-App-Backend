@@ -63,7 +63,7 @@ export class CategoriesService implements OnModuleInit {
     try {
       // No retry on a duplicate key: here it means the code was taken meanwhile.
       const created = await this.tx.run(async (session) => {
-        const [doc] = await this.model.create([{ code: dto.code, name: dto.name, order }], { session });
+        const [doc] = await this.model.create([{ code: dto.code, name: dto.name, nameHi: dto.nameHi || null, order }], { session });
         await this.recordChange(actor, doc, null, toCategoryResponse(doc), session);
         return doc;
       }, 0);
@@ -77,13 +77,14 @@ export class CategoriesService implements OnModuleInit {
   async update(id: string, dto: UpdateCategoryDto, actor: AuthUser): Promise<CategoryResponse> {
     const set: Partial<ExerciseCategory> = {};
     if (dto.name !== undefined) set.name = dto.name;
+    if (dto.nameHi !== undefined) set.nameHi = dto.nameHi || null;
     if (dto.order !== undefined) set.order = dto.order;
     if (dto.active !== undefined) set.active = dto.active;
 
     const updated = await this.tx.run(async (session) => {
       const before = await this.findOrThrow(id, session);
       const changed = Object.entries(set).some(
-        ([key, value]) => before[key as keyof ExerciseCategory] !== value,
+        ([key, value]) => (before[key as keyof ExerciseCategory] ?? null) !== value,
       );
       if (!changed) return before;
 
@@ -189,6 +190,7 @@ export function toCategoryResponse(doc: ExerciseCategory & { _id: unknown }): Ca
     id: String(doc._id),
     code: doc.code,
     name: doc.name,
+    nameHi: doc.nameHi ?? null,
     order: doc.order,
     active: doc.active,
   };

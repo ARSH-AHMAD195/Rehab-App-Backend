@@ -30,18 +30,30 @@ export class CreateCategoryDto {
   @IsString() @MinLength(1) @MaxLength(LIMITS.CATEGORY_NAME)
   name!: string;
 
+  @ApiPropertyOptional({ example: 'संतुलन', nullable: true, description: 'The Hindi name' })
+  @IsOptional()
+  @Transform(trim)
+  @IsString() @MaxLength(LIMITS.CATEGORY_NAME)
+  nameHi?: string | null;
+
   @ApiPropertyOptional({ description: 'Display order. Defaults to after the last category.' })
   @IsOptional() @IsInt() @Min(0)
   order?: number;
 }
 
-/** PATCH: any of name, order, active. The code cannot change. */
+/** PATCH: any of name, nameHi, order, active. The code cannot change. */
 export class UpdateCategoryDto {
   @ApiPropertyOptional({ example: 'Balance and posture' })
   @ValidateIf((_, value) => value !== undefined)
   @Transform(trim)
   @IsString() @MinLength(1) @MaxLength(LIMITS.CATEGORY_NAME)
   name?: string;
+
+  @ApiPropertyOptional({ example: 'संतुलन', nullable: true, description: 'The Hindi name. null removes it.' })
+  @IsOptional()
+  @Transform(trim)
+  @IsString() @MaxLength(LIMITS.CATEGORY_NAME)
+  nameHi?: string | null;
 
   @ApiPropertyOptional()
   @ValidateIf((_, value) => value !== undefined)
@@ -64,6 +76,7 @@ export class CategoryResponse {
   @ApiProperty() id!: string;
   @ApiProperty({ example: 'STRENGTH' }) code!: string;
   @ApiProperty({ example: 'Strength' }) name!: string;
+  @ApiProperty({ nullable: true, type: String, example: null, description: 'null: show `name`' }) nameHi!: string | null;
   @ApiProperty({ example: 2 }) order!: number;
   @ApiProperty() active!: boolean;
 }

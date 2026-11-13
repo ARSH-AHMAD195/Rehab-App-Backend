@@ -18,6 +18,8 @@ export class PlanTarget {
   @Prop({ type: Number, default: null }) sets!: number | null;
   @Prop({ type: Number, default: null }) reps!: number | null;
   @Prop({ type: Number, default: null }) durationMin!: number | null;
+  /** Incentive spirometry: the volume to reach, in mL, set by the doctor. */
+  @Prop({ type: Number, default: null }) volumeMl!: number | null;
 }
 const PlanTargetSchema = SchemaFactory.createForClass(PlanTarget);
 

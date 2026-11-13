@@ -127,6 +127,20 @@ export const DEFAULT_CATEGORIES = [
   { code: 'STRETCHING', name: 'Stretching', order: 4 },
 ] as const;
 
+/**
+ * Incentive spirometry, the third exercise the client asked for. The API puts
+ * it in the library itself, under Breathing, and finds it again by this code.
+ * The patient records the volume reached on the spirometer with each tick.
+ * 5000 mL is the top of the usual spirometer scale: a typing-mistake check,
+ * not a clinical limit. The target volume is the doctor's, per patient.
+ */
+export const SPIROMETRY = {
+  CODE: 'INCENTIVE_SPIROMETRY',
+  NAME: 'Incentive spirometry',
+  CATEGORY: 'BREATHING',
+  MAX_VOLUME_ML: 5000,
+} as const;
+
 /** A category code: capitals, digits and underscores, starting with a letter. */
 export const CATEGORY_CODE_PATTERN = /^[A-Z][A-Z0-9_]{1,29}$/;
 
