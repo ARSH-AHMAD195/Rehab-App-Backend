@@ -5,10 +5,9 @@ import { ROLES } from '../constants';
 import { AuthUser, UsersService } from '../../users/users.service';
 
 /**
- * Same rule as Health Monitoring: on /patients/:patientId routes, a doctor
- * reaches only patients linked to them. Unlinked, deactivated and
- * non-existent patients all give the same 404 NOT_FOUND, so a doctor can't
- * tell whether a patient exists.
+ * Same rule as Health Monitoring: on /patients/:patientId routes, any doctor
+ * reaches any active patient (team decision, Nov 2026: every doctor sees
+ * every patient). Deactivated and non-existent patients give 404 NOT_FOUND.
  */
 @Injectable()
 export class PatientAccessGuard implements CanActivate {
@@ -23,8 +22,7 @@ export class PatientAccessGuard implements CanActivate {
     // The role guard has already limited these routes to DOCTOR.
     if (user.role !== ROLES.DOCTOR) throw new NotFoundException('Patient not found');
 
-    const linked = await this.users.isPatientLinkedToDoctor(patientId, user.id);
-    if (!linked) throw new NotFoundException('Patient not found');
+    if (!(await this.users.isActivePatient(patientId))) throw new NotFoundException('Patient not found');
     return true;
   }
 }

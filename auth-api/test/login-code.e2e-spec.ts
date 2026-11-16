@@ -38,7 +38,7 @@ describe('Login code (doctor-issued, no SMS)', () => {
 
     const list = await api().get('/api/v1/doctor/login-code-requests').set('Authorization', t.auth(doctor)).expect(200);
     expect(list.body.data).toEqual([
-      { patient: { id: patient.id, name: 'Rajesh Iyer', phone: PHONE }, requestedAt: expect.stringMatching(/\+05:30$/) },
+      { patient: { id: patient.id, name: 'Rajesh Iyer', phone: PHONE }, requestedAt: expect.stringMatching(/\+05:30$/), myPatient: true },
     ]);
 
     const issued = await issue(doctor).expect(201);
@@ -146,11 +146,21 @@ describe('Login code (doctor-issued, no SMS)', () => {
   });
 
   describe('who can make codes and see requests', () => {
-    it('an unlinked doctor gets 404 and does not see the request', async () => {
+    it('any doctor sees every request, their own patients first, and can make the code', async () => {
+      const theirs = await t.seed({ role: 'PATIENT', name: 'Anita Shah', phone: '+919811111111', doctorIds: [otherDoctor.id] });
       await requestCode().expect(202);
-      await issue(otherDoctor).expect(404);
-      const list = await api().get('/api/v1/doctor/login-code-requests').set('Authorization', t.auth(otherDoctor)).expect(200);
-      expect(list.body.data).toEqual([]);
+      await requestCode('+919811111111').expect(202); // the newer request
+
+      const list = await api().get('/api/v1/doctor/login-code-requests').set('Authorization', t.auth(doctor)).expect(200);
+      expect(list.body.data.map((r: { patient: { name: string }; myPatient: boolean }) => [r.patient.name, r.myPatient])).toEqual([
+        ['Rajesh Iyer', true], // their own patient first, though the other request is newer
+        ['Anita Shah', false],
+      ]);
+      const other = await api().get('/api/v1/doctor/login-code-requests').set('Authorization', t.auth(otherDoctor)).expect(200);
+      expect(other.body.data.map((r: { patient: { id: string } }) => r.patient.id)).toEqual([theirs.id, patient.id]);
+
+      const issued = await issue(otherDoctor).expect(201);
+      await verify(issued.body.code).expect(200);
     });
 
     it('an admin sees every request and can make a code', async () => {

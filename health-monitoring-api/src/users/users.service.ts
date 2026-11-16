@@ -31,21 +31,14 @@ export class UsersService {
   }
 
   /**
-   * Doctor endpoints, v1.1: "PatientAccessGuard returns 404 when the patient
-   * isn't linked to the calling doctor, so the doctor can't tell whether that
-   * patient exists." One query answers both questions, so the two cases are
-   * indistinguishable from outside.
+   * Every doctor may see every patient (team decision, Nov 2026). The link
+   * (`doctorIds`) now only says whose alert inbox gets the patient. So this
+   * asks just whether the patient exists and is active; deactivated and
+   * unknown patients both give 404.
    */
-  async isPatientLinkedToDoctor(patientId: string, doctorId: string): Promise<boolean> {
+  async isActivePatient(patientId: string): Promise<boolean> {
     if (!Types.ObjectId.isValid(patientId)) return false;
-    const match = await this.users
-      .exists({
-        _id: new Types.ObjectId(patientId),
-        role: ROLES.PATIENT,
-        active: true,
-        doctorIds: new Types.ObjectId(doctorId),
-      })
-      .exec();
+    const match = await this.users.exists({ _id: new Types.ObjectId(patientId), role: ROLES.PATIENT, active: true }).exec();
     return match !== null;
   }
 

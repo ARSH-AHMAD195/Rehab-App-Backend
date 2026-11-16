@@ -31,10 +31,20 @@ describe('Patient and doctor management', () => {
   });
 
   describe('GET /patients', () => {
-    it('a doctor sees only their linked patients', async () => {
-      const res = await api().get('/api/v1/patients').set('Authorization', t.auth(drMeera)).expect(200);
-      expect(res.body.data.map((p: { name: string }) => p.name)).toEqual(['Rajesh Iyer']);
-      expect(res.body.nextCursor).toBeNull();
+    it('a doctor sees every patient, and only their own with scope=mine', async () => {
+      const all = await api().get('/api/v1/patients').set('Authorization', t.auth(drMeera)).expect(200);
+      expect(all.body.data.map((p: { name: string }) => p.name)).toEqual(['Anita Shah', 'Rajesh Iyer']);
+      const everyone = await api().get('/api/v1/patients?scope=all').set('Authorization', t.auth(drMeera)).expect(200);
+      expect(everyone.body.data).toHaveLength(2);
+
+      const mine = await api().get('/api/v1/patients?scope=mine').set('Authorization', t.auth(drMeera)).expect(200);
+      expect(mine.body.data.map((p: { name: string }) => p.name)).toEqual(['Rajesh Iyer']);
+      expect(mine.body.nextCursor).toBeNull();
+    });
+
+    it('scope is a doctor-only filter and must be all or mine', async () => {
+      await api().get('/api/v1/patients?scope=mine').set('Authorization', t.auth(admin)).expect(400);
+      await api().get('/api/v1/patients?scope=team').set('Authorization', t.auth(drMeera)).expect(400);
     });
 
     it('an admin sees everyone, sorted by name, and can filter by doctor', async () => {
@@ -60,20 +70,22 @@ describe('Patient and doctor management', () => {
 
     it('active=false and active=all', async () => {
       await t.seed({ role: 'PATIENT', name: 'Zed Former', doctorIds: [drMeera.id], active: false });
-      const active = await api().get('/api/v1/patients').set('Authorization', t.auth(drMeera)).expect(200);
+      const active = await api().get('/api/v1/patients?scope=mine').set('Authorization', t.auth(drMeera)).expect(200);
       expect(active.body.data).toHaveLength(1);
-      const inactive = await api().get('/api/v1/patients?active=false').set('Authorization', t.auth(drMeera)).expect(200);
+      const inactive = await api().get('/api/v1/patients?scope=mine&active=false').set('Authorization', t.auth(drMeera)).expect(200);
       expect(inactive.body.data.map((p: { name: string }) => p.name)).toEqual(['Zed Former']);
-      const all = await api().get('/api/v1/patients?active=all').set('Authorization', t.auth(drMeera)).expect(200);
+      const all = await api().get('/api/v1/patients?scope=mine&active=all').set('Authorization', t.auth(drMeera)).expect(200);
       expect(all.body.data).toHaveLength(2);
+      const everyone = await api().get('/api/v1/patients?active=all').set('Authorization', t.auth(drMeera)).expect(200);
+      expect(everyone.body.data).toHaveLength(3);
     });
 
     it('pages with a cursor', async () => {
       for (const name of ['Bala', 'Chitra', 'Dev']) await t.seed({ role: 'PATIENT', name, doctorIds: [drMeera.id] });
-      const first = await api().get('/api/v1/patients?limit=2').set('Authorization', t.auth(drMeera)).expect(200);
+      const first = await api().get('/api/v1/patients?scope=mine&limit=2').set('Authorization', t.auth(drMeera)).expect(200);
       expect(first.body.data.map((p: { name: string }) => p.name)).toEqual(['Bala', 'Chitra']);
       const second = await api()
-        .get(`/api/v1/patients?limit=2&cursor=${first.body.nextCursor}`)
+        .get(`/api/v1/patients?scope=mine&limit=2&cursor=${first.body.nextCursor}`)
         .set('Authorization', t.auth(drMeera))
         .expect(200);
       expect(second.body.data.map((p: { name: string }) => p.name)).toEqual(['Dev', 'Rajesh Iyer']);
@@ -100,9 +112,10 @@ describe('Patient and doctor management', () => {
   });
 
   describe('GET /patients/:patientId', () => {
-    it('404 for an unlinked, unknown or malformed id - indistinguishable', async () => {
+    it('any doctor sees any patient; 404 for an unknown, malformed or non-patient id', async () => {
       await api().get(`/api/v1/patients/${rajesh.id}`).set('Authorization', t.auth(drMeera)).expect(200);
-      for (const id of [anita.id, '6700aa01e4b0f1a2b3c4d999', 'abc', drArjun.id]) {
+      await api().get(`/api/v1/patients/${anita.id}`).set('Authorization', t.auth(drMeera)).expect(200);
+      for (const id of ['6700aa01e4b0f1a2b3c4d999', 'abc', drArjun.id]) {
         const res = await api().get(`/api/v1/patients/${id}`).set('Authorization', t.auth(drMeera)).expect(404);
         expect(res.body.message).toBe('Patient not found');
       }
@@ -110,14 +123,15 @@ describe('Patient and doctor management', () => {
   });
 
   describe('PATCH /patients/:patientId', () => {
-    it('a linked doctor updates basic details', async () => {
+    it('any doctor updates basic details, linked or not', async () => {
       const res = await api()
         .patch(`/api/v1/patients/${rajesh.id}`)
         .set('Authorization', t.auth(drMeera))
         .send({ phone: '+919876543210' })
         .expect(200);
       expect(res.body.phone).toBe('+919876543210');
-      await api().patch(`/api/v1/patients/${anita.id}`).set('Authorization', t.auth(drMeera)).send({ name: 'X' }).expect(404);
+      const other = await api().patch(`/api/v1/patients/${anita.id}`).set('Authorization', t.auth(drMeera)).send({ name: 'Anita S' }).expect(200);
+      expect(other.body.name).toBe('Anita S');
     });
 
     it('only an admin may deactivate', async () => {
@@ -143,7 +157,7 @@ describe('Patient and doctor management', () => {
   });
 
   describe('PUT /patients/:patientId/doctors', () => {
-    it('replaces the links; a removed doctor loses access at once', async () => {
+    it('replaces the links; a removed doctor no longer has the patient as one of theirs', async () => {
       const res = await api()
         .put(`/api/v1/patients/${rajesh.id}/doctors`)
         .set('Authorization', t.auth(admin))
@@ -151,8 +165,10 @@ describe('Patient and doctor management', () => {
         .expect(200);
       expect(res.body.doctors).toEqual([{ id: drArjun.id, name: 'Dr Arjun Rao' }]);
 
-      await api().get(`/api/v1/patients/${rajesh.id}`).set('Authorization', t.auth(drMeera)).expect(404);
-      await api().get(`/api/v1/patients/${rajesh.id}`).set('Authorization', t.auth(drArjun)).expect(200);
+      const meeras = await api().get('/api/v1/patients?scope=mine').set('Authorization', t.auth(drMeera)).expect(200);
+      expect(meeras.body.data).toHaveLength(0);
+      const arjuns = await api().get('/api/v1/patients?scope=mine').set('Authorization', t.auth(drArjun)).expect(200);
+      expect(arjuns.body.data.map((p: { name: string }) => p.name)).toEqual(['Anita Shah', 'Rajesh Iyer']);
 
       const audit = await t.connection.collection('auditLogs').findOne({ action: 'DOCTOR_LINKS_CHANGED' });
       expect(audit).toMatchObject({ before: { doctorIds: [drMeera.id] }, after: { doctorIds: [drArjun.id] } });
@@ -188,6 +204,54 @@ describe('Patient and doctor management', () => {
 
     it('403 for a doctor', async () => {
       await api().put(`/api/v1/patients/${rajesh.id}/doctors`).set('Authorization', t.auth(drMeera)).send({ doctorIds: [drMeera.id] }).expect(403);
+    });
+  });
+
+  describe('PUT and DELETE /patients/:patientId/doctors/me', () => {
+    const me = (method: 'put' | 'delete', patientId: string, who: TestUser) =>
+      api()[method](`/api/v1/patients/${patientId}/doctors/me`).set('Authorization', t.auth(who));
+
+    it('a doctor adds a patient to their own, safely twice, audited once', async () => {
+      const res = await me('put', anita.id, drMeera).expect(200);
+      expect(res.body.doctors.map((d: { name: string }) => d.name).sort()).toEqual(['Dr Arjun Rao', 'Dr Meera Nair']);
+      await me('put', anita.id, drMeera).expect(200);
+
+      const audits = await t.connection.collection('auditLogs').find({ action: 'DOCTOR_LINKS_CHANGED' }).toArray();
+      expect(audits).toHaveLength(1);
+      expect(audits[0]).toMatchObject({ before: { doctorIds: [drArjun.id] }, after: { doctorIds: [drArjun.id, drMeera.id] } });
+
+      const mine = await api().get('/api/v1/patients?scope=mine').set('Authorization', t.auth(drMeera)).expect(200);
+      expect(mine.body.data.map((p: { name: string }) => p.name)).toEqual(['Anita Shah', 'Rajesh Iyer']);
+    });
+
+    it('a doctor takes a patient off their own; they can still open the chart', async () => {
+      await me('put', anita.id, drMeera).expect(200);
+      const res = await me('delete', anita.id, drMeera).expect(200);
+      expect(res.body.doctors).toEqual([{ id: drArjun.id, name: 'Dr Arjun Rao' }]);
+      await me('delete', anita.id, drMeera).expect(200); // already off: nothing changes
+
+      await api().get(`/api/v1/patients/${anita.id}`).set('Authorization', t.auth(drMeera)).expect(200);
+      expect(await t.connection.collection('auditLogs').countDocuments({ action: 'DOCTOR_LINKS_CHANGED' })).toBe(2);
+    });
+
+    it('409 LAST_DOCTOR rather than leave a patient with no doctor', async () => {
+      const res = await me('delete', rajesh.id, drMeera).expect(409);
+      expect(res.body.code).toBe('LAST_DOCTOR');
+      expect(await activeDoctorsOf(rajesh.id)).toHaveLength(1);
+    });
+
+    it('two doctors leaving at once: one is refused, the patient keeps a doctor', async () => {
+      await me('put', rajesh.id, drArjun).expect(200);
+      const results = await Promise.all([me('delete', rajesh.id, drMeera), me('delete', rajesh.id, drArjun)]);
+      expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+      expect(await activeDoctorsOf(rajesh.id)).toHaveLength(1);
+    });
+
+    it('404 for an unknown patient; 403 for an admin or a patient', async () => {
+      await me('put', '6700aa01e4b0f1a2b3c4d999', drMeera).expect(404);
+      await me('put', drArjun.id, drMeera).expect(404);
+      await me('put', rajesh.id, admin).expect(403);
+      await me('delete', rajesh.id, rajesh).expect(403);
     });
   });
 

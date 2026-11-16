@@ -29,8 +29,10 @@ All paths start with `/api/v1`. Every request needs `Authorization: Bearer <Fire
 | Admin | `PUT /admin/vital-types/:type` | Change a parameter's unit, range or form settings |
 
 The patient id for `/me/...` always comes from the token, never from the request.
-A doctor asking about a patient who isn't linked to them gets the same **404** as
-for a patient who doesn't exist, so they can't tell the two apart.
+Every doctor may see every active patient (team decision, November 2026). A
+deactivated or unknown patient is a **404**. The doctor-patient link only decides
+whose inbox `GET /doctor/alerts` (without `patientId`) covers; with `?patientId=`
+it works for any patient, and any doctor may acknowledge.
 
 ## 2. Saving today's readings (`PUT /me/vitals/today`)
 
@@ -85,7 +87,7 @@ Every error has the same shape:
 | 401 | `UNAUTHENTICATED` | Token missing, invalid or expired, or the user is deactivated | Sign in again |
 | 403 | `FORBIDDEN_ROLE` | The user's role can't use this route | Hide the feature |
 | 403 | `EMAIL_NOT_VERIFIED` | Signed in, but the email isn't verified yet (same as the Auth API) | Show the "verify your email" screen; don't sign out |
-| 404 | `NOT_FOUND` | Not found, or a patient not linked to this doctor | Show "not found" |
+| 404 | `NOT_FOUND` | Not found, or a deactivated patient | Show "not found" |
 | 409 | `DAY_CHANGED` | The date sent is no longer the patient's today | Reload today's log |
 | 409 | `ALERT_ALREADY_ACKNOWLEDGED` | Someone already acknowledged this alert | Refresh the alert |
 | 409 | `CONCURRENT_UPDATE` * | Another save changed the same record at the same moment | Retry the same request |

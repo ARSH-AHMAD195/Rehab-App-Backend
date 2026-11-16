@@ -202,12 +202,13 @@ describe('Medical profile', () => {
     });
   });
 
-  it('an unlinked doctor gets 404; an admin and the patient get 403 on the doctor route', async () => {
-    await api().get(theirs()).set('Authorization', t.auth(otherDoctor)).expect(404);
-    await api().patch(theirs()).set('Authorization', t.auth(otherDoctor)).send({ version: 0, sex: 'MALE' }).expect(404);
+  it('any doctor may read and edit it, linked or not; an admin and the patient get 403 on the doctor route', async () => {
+    await api().get(theirs()).set('Authorization', t.auth(otherDoctor)).expect(200);
+    await api().patch(theirs()).set('Authorization', t.auth(otherDoctor)).send({ version: 0, sex: 'MALE' }).expect(200);
+    expect(await t.connection.collection('auditLogs').countDocuments({ action: 'MEDICAL_PROFILE_VIEWED' })).toBe(1);
     await api().get(theirs()).set('Authorization', t.auth(admin)).expect(403);
     await api().get(theirs()).set('Authorization', t.auth(patient)).expect(403);
-    expect(await t.connection.collection('auditLogs').countDocuments({ action: 'MEDICAL_PROFILE_VIEWED' })).toBe(0);
+    await api().get('/api/v1/patients/6700aa01e4b0f1a2b3c4d999/medical-profile').set('Authorization', t.auth(otherDoctor)).expect(404);
   });
 
   it('admins and doctors cannot use the /me route', async () => {

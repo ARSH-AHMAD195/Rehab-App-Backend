@@ -31,16 +31,17 @@ export class DoctorAlertsController {
   @Get()
   @ApiOperation({
     summary: "Alerts across the doctor's patients",
-    description: 'Newest first. Defaults to status=OPEN.',
+    description:
+      'Newest first. Defaults to status=OPEN. Without patientId: the inbox, i.e. the patients linked to the doctor ("my patients"). ' +
+      'With patientId: that patient\'s alerts, for any doctor.',
   })
   @ApiOkResponse({ type: AlertListResponse })
-  @ApiNotFoundResponse({ description: 'NOT_FOUND - patientId filter is not a linked patient' })
+  @ApiNotFoundResponse({ description: 'NOT_FOUND - patientId is not an active patient' })
   async list(
     @CurrentUser() doctor: AuthUser,
     @Query() query: AlertsQueryDto,
   ): Promise<AlertListResponse> {
-    // "patientId - Filter to one patient. 404 if not linked" (v1.1).
-    if (query.patientId && !(await this.users.isPatientLinkedToDoctor(query.patientId, doctor.id))) {
+    if (query.patientId && !(await this.users.isActivePatient(query.patientId))) {
       throw new NotFoundException('Patient not found');
     }
     return this.alerts.listForDoctor(doctor, query);
@@ -51,12 +52,12 @@ export class DoctorAlertsController {
     summary: 'Acknowledge an alert',
     description:
       'ACKNOWLEDGED is final - alerts never reopen - and the note is set once and cannot be ' +
-      'edited afterwards. Any doctor linked to the patient may acknowledge.',
+      'edited afterwards. Any doctor may acknowledge.',
   })
   @ApiOkResponse({ type: AlertResponse })
   @ApiBadRequestResponse({ description: 'VALIDATION_FAILED - any status other than ACKNOWLEDGED' })
   @ApiNotFoundResponse({
-    description: "NOT_FOUND - unknown alert, or its patient isn't linked to this doctor",
+    description: 'NOT_FOUND - unknown alert, or its patient is deactivated',
   })
   @ApiConflictResponse({ description: 'ALERT_ALREADY_ACKNOWLEDGED' })
   async acknowledge(

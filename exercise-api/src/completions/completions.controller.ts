@@ -172,6 +172,7 @@ export class DoctorComplianceController {
     description:
       "Planned, done and skipped over the last `days` days (7 by default, at most 90), each ending on that patient's " +
       'own today, plus today so far and their last tick or skip. Counted the same way as the one-patient route. ' +
+      'Every active patient by default; scope=mine for only the patients linked to you. ' +
       'percentage is null until the client agrees the formula.',
   })
   @ApiOkResponse({ type: CaseloadResponse })

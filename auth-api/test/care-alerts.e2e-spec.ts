@@ -203,12 +203,16 @@ describe('Care-team alerts', () => {
   });
 
   describe('access', () => {
-    it("a doctor outside the care team sees nothing and can't acknowledge", async () => {
+    it("keeps a doctor's inbox to their own patients, but any doctor sees and acknowledges on the patient's chart", async () => {
       await result('HB', { value: 7 }).expect(201);
       const mine = await inbox(drA).expect(200);
+      // The inbox (no patientId) is only the doctor's linked patients
       expect((await inbox(outsider).expect(200)).body.data).toEqual([]);
-      await ack(mine.body.data[0].id, outsider).expect(404);
-      await inbox(outsider, `?patientId=${patient.id}`).expect(404);
+      // ...but every doctor sees every patient
+      const chart = await inbox(outsider, `?patientId=${patient.id}`).expect(200);
+      expect(chart.body.data.map((a: { id: string }) => a.id)).toEqual([mine.body.data[0].id]);
+      await ack(mine.body.data[0].id, outsider).expect(200);
+      await inbox(outsider, '?patientId=6700aa01e4b0f1a2b3c4d999').expect(404);
     });
 
     it('admins and patients have no inbox', async () => {

@@ -193,9 +193,10 @@ describe('Nutrition (diet chart and meal logging)', () => {
       expect(await ctx.connection.collection('auditLogs').countDocuments({ action: 'PATIENT_NUTRITION_VIEWED' })).toBe(3);
     });
 
-    it('an unlinked doctor gets 404; a patient cannot use doctor routes or change the plan', async () => {
-      await as(otherDoctor).get(`/doctor/patients/${patient.id}/meals/today`).expect(404);
-      await plan({ version: 0, targets: { kcal: 1800, proteinG: 70 } }, otherDoctor).expect(404);
+    it('any doctor may see and change it; a patient cannot use doctor routes or change the plan', async () => {
+      await as(otherDoctor).get(`/doctor/patients/${patient.id}/meals/today`).expect(200);
+      await plan({ version: 0, targets: { kcal: 1800, proteinG: 70 } }, otherDoctor).expect(200);
+      await as(otherDoctor).get('/doctor/patients/6701f0a9e4b0f1a2b3c4d999/meals/today').expect(404);
       await as(patient).get(`/doctor/patients/${patient.id}/diet-plan`).expect(403);
       await as(doctor).get('/me/meals/today').expect(403);
     });

@@ -177,11 +177,13 @@ describe('Auth + Health Monitoring + Exercise APIs, one database', () => {
     expect(saved.body).toMatchObject({ date: todayIn(ZONE), timeZone: ZONE, filledCount: 2 });
     expect(saved.body.alerts).toEqual([expect.objectContaining({ type: 'PAIN', rule: 'ABOVE_HIGH', severity: 'MEDIUM' })]);
 
-    // 3. HEALTH MONITORING: the linked doctor sees the patient (by the name Auth stored) and the alert.
+    // 3. HEALTH MONITORING: the linked doctor gets the alert in their inbox (with the name Auth stored).
+    // Every doctor sees every patient, but only the linked doctor's inbox has the alert.
     const queueA = await hm().get('/api/v1/doctor/alerts').set('Authorization', bearer(uidA)).expect(200);
     expect(queueA.body.data).toEqual([expect.objectContaining({ patient: { id: patient.id, name: 'Rajesh Iyer' } })]);
+    expect((await hm().get('/api/v1/doctor/alerts').set('Authorization', bearer(uidB)).expect(200)).body.data).toHaveLength(0);
     await hm().get(`/api/v1/doctor/patients/${patient.id}/vitals/today`).set('Authorization', bearer(uidA)).expect(200);
-    await hm().get(`/api/v1/doctor/patients/${patient.id}/vitals/today`).set('Authorization', bearer(uidB)).expect(404);
+    await hm().get(`/api/v1/doctor/patients/${patient.id}/vitals/today`).set('Authorization', bearer(uidB)).expect(200);
 
     // 4. EXERCISE: the same admin (role from Auth) builds the library.
     const categories = (await ex().get('/api/v1/exercise-categories').set('Authorization', admin).expect(200)).body.data;
@@ -195,7 +197,7 @@ describe('Auth + Health Monitoring + Exercise APIs, one database', () => {
     // A doctor can't change an exercise the admin added.
     await ex().patch(`/api/v1/exercises/${knee.id}`).set('Authorization', bearer(uidA)).send({ name: 'X' }).expect(403);
 
-    // 5. EXERCISE: Dr Meera, linked in Auth, assigns a plan. Dr Arjun, not linked, can't see the patient.
+    // 5. EXERCISE: Dr Meera, linked in Auth, assigns a plan. Dr Arjun, not linked, can see it too.
     const plan = (await ex().put(`/api/v1/patients/${patient.id}/exercise-plan`).set('Authorization', bearer(uidA))
       .send({
         version: 0,
@@ -207,7 +209,7 @@ describe('Auth + Health Monitoring + Exercise APIs, one database', () => {
       .expect(200)).body;
     // The doctor's name comes from Auth's users record.
     expect(plan).toMatchObject({ patientId: patient.id, version: 1, assignedBy: { id: drA.id, name: 'Dr Meera Nair' } });
-    await ex().get(`/api/v1/patients/${patient.id}/exercise-plan`).set('Authorization', bearer(uidB)).expect(404);
+    await ex().get(`/api/v1/patients/${patient.id}/exercise-plan`).set('Authorization', bearer(uidB)).expect(200);
     const kneeItem = plan.items.find((i: { exercise: { id: string } }) => i.exercise.id === knee.id).itemId;
     const walkItem = plan.items.find((i: { exercise: { id: string } }) => i.exercise.id === walk.id).itemId;
 
@@ -232,15 +234,16 @@ describe('Auth + Health Monitoring + Exercise APIs, one database', () => {
     const compliance = (await ex().get(`/api/v1/patients/${patient.id}/exercise-compliance`).set('Authorization', bearer(uidA)).expect(200)).body;
     expect(compliance).toMatchObject({ to: todayIn(ZONE), planned: 3, done: 2, percentage: null });
 
-    // 8. AUTH: the admin moves the patient to Dr Arjun. BOTH other APIs follow at once.
+    // 8. AUTH: the admin moves the patient to Dr Arjun. The inboxes in BOTH other APIs follow at once.
     await auth().put(`/api/v1/patients/${patient.id}/doctors`).set('Authorization', admin).send({ doctorIds: [drB.id] }).expect(200);
-    // Health Monitoring
-    await hm().get(`/api/v1/doctor/patients/${patient.id}/vitals/today`).set('Authorization', bearer(uidA)).expect(404);
+    // Health Monitoring: the alert moves to Dr Arjun's inbox; Dr Meera can still open the chart.
     expect((await hm().get('/api/v1/doctor/alerts').set('Authorization', bearer(uidA)).expect(200)).body.data).toHaveLength(0);
-    await hm().get(`/api/v1/doctor/patients/${patient.id}/vitals/today`).set('Authorization', bearer(uidB)).expect(200);
     expect((await hm().get('/api/v1/doctor/alerts').set('Authorization', bearer(uidB)).expect(200)).body.data).toHaveLength(1);
-    // Exercise: the plan belongs to the patient, so Dr Arjun takes it over as it is.
-    await ex().get(`/api/v1/patients/${patient.id}/exercise-plan`).set('Authorization', bearer(uidA)).expect(404);
+    await hm().get(`/api/v1/doctor/patients/${patient.id}/vitals/today`).set('Authorization', bearer(uidA)).expect(200);
+    // Exercise: the plan belongs to the patient, so Dr Arjun takes it over as it is; he is now the one
+    // whose caseload (scope=mine) has the patient.
+    const meerasOwn = (await ex().get('/api/v1/doctor/exercise-compliance?scope=mine').set('Authorization', bearer(uidA)).expect(200)).body;
+    expect(meerasOwn.data).toHaveLength(0);
     const takenOver = (await ex().get(`/api/v1/patients/${patient.id}/exercise-plan`).set('Authorization', bearer(uidB)).expect(200)).body;
     expect(takenOver).toMatchObject({ version: 1, assignedBy: { name: 'Dr Meera Nair' } });
     await ex().put(`/api/v1/patients/${patient.id}/exercise-plan`).set('Authorization', bearer(uidB))

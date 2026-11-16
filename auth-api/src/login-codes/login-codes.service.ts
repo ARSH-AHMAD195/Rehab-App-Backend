@@ -21,6 +21,8 @@ type Actor = { id: string; role: Role };
 export interface LoginCodeRequestResponse {
   patient: { id: string; name: string; phone: string | null };
   requestedAt: string | null;
+  /** The patient is linked to the calling doctor ("my patient"). Always false for an admin. */
+  myPatient: boolean;
 }
 
 export interface IssuedLoginCodeResponse {
@@ -99,40 +101,37 @@ export class LoginCodesService {
     });
   }
 
-  /** GET /doctor/login-code-requests: open requests from the caller's patients (any patient for an admin). */
+  /**
+   * GET /doctor/login-code-requests: every open request (any doctor may make
+   * the code, so a patient isn't stuck when their own doctor is away). The
+   * caller's own patients come first, flagged `myPatient`; then newest first.
+   */
   async openRequests(caller: Actor): Promise<{ data: LoginCodeRequestResponse[] }> {
     const since = new Date(Date.now() - LOGIN_CODE.REQUEST_VISIBLE_HOURS * HOUR_MS);
     const filter: FilterQuery<LoginCode> = { requestedAt: { $gte: since } };
 
-    if (caller.role === ROLES.DOCTOR) {
-      const linked = await this.users.model
-        .find({ role: ROLES.PATIENT, active: true, doctorIds: new Types.ObjectId(caller.id) }, { _id: 1 })
-        .lean();
-      if (!linked.length) return { data: [] };
-      filter.patientId = { $in: linked.map((p) => p._id) };
-    }
-
     const rows = await this.model.find(filter).sort({ requestedAt: -1 }).limit(100).lean();
     const patients = await this.users.model
-      .find({ _id: { $in: rows.map((r) => r.patientId) }, role: ROLES.PATIENT, active: true }, { name: 1, phone: 1, timeZone: 1 })
+      .find({ _id: { $in: rows.map((r) => r.patientId) }, role: ROLES.PATIENT, active: true }, { name: 1, phone: 1, timeZone: 1, doctorIds: 1 })
       .lean();
     const byId = new Map(patients.map((p) => [String(p._id), p]));
 
-    return {
-      data: rows
-        .filter((row) => byId.has(String(row.patientId)))
-        .map((row) => {
-          const patient = byId.get(String(row.patientId))!;
-          return {
-            patient: { id: String(patient._id), name: patient.name, phone: patient.phone ?? null },
-            requestedAt: toLocalIso(row.requestedAt, patient.timeZone),
-          };
-        }),
-    };
+    const data = rows
+      .filter((row) => byId.has(String(row.patientId)))
+      .map((row) => {
+        const patient = byId.get(String(row.patientId))!;
+        return {
+          patient: { id: String(patient._id), name: patient.name, phone: patient.phone ?? null },
+          requestedAt: toLocalIso(row.requestedAt, patient.timeZone),
+          myPatient: caller.role === ROLES.DOCTOR && (patient.doctorIds ?? []).some((id) => String(id) === caller.id),
+        };
+      });
+    // Stable sort: keeps newest first within each group.
+    return { data: [...data.filter((r) => r.myPatient), ...data.filter((r) => !r.myPatient)] };
   }
 
   /**
-   * POST /patients/:patientId/login-code. A linked doctor or an admin makes a
+   * POST /patients/:patientId/login-code. Any doctor or an admin makes a
    * new code; any earlier code stops working and the open request is closed.
    */
   async issue(caller: Actor, patientId: string): Promise<IssuedLoginCodeResponse> {

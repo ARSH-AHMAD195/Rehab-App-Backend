@@ -152,19 +152,20 @@ describe('Exercise compliance', () => {
     await as(doctor).get(compliancePath('?from=2026-02-30')).expect(400);
   });
 
-  it('is for linked doctors only, and audited', async () => {
+  it('is for any doctor, and audited', async () => {
     await as(doctor).get(compliancePath()).expect(200);
     const views = await ctx.connection.collection('auditLogs').find({ action: 'EXERCISE_PLAN_VIEWED' }).toArray();
     expect(views).toHaveLength(1);
     expect(String(views[0].patientId)).toBe(patient.id);
 
-    await as(otherDoctor).get(compliancePath()).expect(404);
+    // Every doctor sees every patient, not only the linked one
+    await as(otherDoctor).get(compliancePath()).expect(200);
     await as(patient).get(compliancePath()).expect(403);
     await as(admin).get(compliancePath()).expect(403);
   });
 
   describe("a doctor's caseload", () => {
-    it('sums each linked patient the same way as the one-patient route, with today and last activity', async () => {
+    it('sums each patient the same way as the one-patient route, with today and last activity; scope=mine keeps only linked ones', async () => {
       const ids = await planFrom(10, 0, [{ exerciseId: kneeId, times: 2 }]);
       const knee = ids[kneeId];
       await pastTicks(daysAgo(6), knee, kneeId, 2);
@@ -180,7 +181,12 @@ describe('Exercise compliance', () => {
       await ctx.createUser({ uid: 'pat-3', role: 'PATIENT', name: 'Gone', active: false, doctorIds: [doctor.id] });
       await ctx.createUser({ uid: 'pat-4', role: 'PATIENT', name: 'Not Mine', doctorIds: [otherDoctor.id] });
 
-      const res = await as(doctor).get('/doctor/exercise-compliance').expect(200);
+      // Every active patient by default, the doctor's own with scope=mine; never the deactivated one.
+      const all = await as(doctor).get('/doctor/exercise-compliance').expect(200);
+      expect(all.body.data.map((row: { patient: { name: string } }) => row.patient.name)).toEqual(['Anita Shah', 'Not Mine', 'Rajesh Iyer']);
+      await ctx.connection.collection('auditLogs').deleteMany({ action: 'EXERCISE_PLAN_VIEWED' });
+
+      const res = await as(doctor).get('/doctor/exercise-compliance?scope=mine').expect(200);
       const one = await as(doctor).get(compliancePath()).expect(200);
 
       expect(res.body.days).toBe(7);
@@ -219,11 +225,15 @@ describe('Exercise compliance', () => {
       await as(doctor).get('/doctor/exercise-compliance?days=0').expect(400);
       await as(doctor).get('/doctor/exercise-compliance?days=91').expect(400);
       await as(doctor).get('/doctor/exercise-compliance?from=2026-01-01').expect(400);
+      await as(doctor).get('/doctor/exercise-compliance?scope=everyone').expect(400);
 
       await as(patient).get('/doctor/exercise-compliance').expect(403);
       await as(admin).get('/doctor/exercise-compliance').expect(403);
 
-      const none = await as(otherDoctor).get('/doctor/exercise-compliance').expect(200);
+      // Another doctor sees this patient too, but has none of their own
+      const all = await as(otherDoctor).get('/doctor/exercise-compliance').expect(200);
+      expect(all.body.data).toHaveLength(1);
+      const none = await as(otherDoctor).get('/doctor/exercise-compliance?scope=mine').expect(200);
       expect(none.body).toEqual({ days: 7, data: [] });
     });
   });

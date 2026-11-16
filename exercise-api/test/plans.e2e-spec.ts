@@ -255,17 +255,16 @@ describe('Exercise plans', () => {
   });
 
   describe('who can see and change a plan', () => {
-    it('gives 404 to a doctor the patient is not linked to, whatever the route', async () => {
-      for (const res of [
-        await as(otherDoctor).get(planPath()),
-        await savePlan(0, [item(kneeId)], otherDoctor),
-        await as(otherDoctor).get(`${planPath()}/versions`),
-      ]) {
-        expect(res.status).toBe(404);
-        expect(res.body.code).toBe(ERROR_CODES.NOT_FOUND);
-      }
-      // Same answer as for a patient that doesn't exist.
-      await as(doctor).get('/patients/6712a0b1c2d3e4f5a6b7c8d9/exercise-plan').expect(404);
+    it('lets any doctor see and change the plan, not only a linked one (every doctor sees every patient)', async () => {
+      await as(otherDoctor).get(planPath()).expect(200);
+      await savePlan(0, [item(kneeId)], otherDoctor).expect(200);
+      const versions = await as(otherDoctor).get(`${planPath()}/versions`).expect(200);
+      expect(versions.body.data).toHaveLength(1);
+    });
+
+    it('gives 404 for a patient that does not exist, whatever the route', async () => {
+      const res = await as(doctor).get('/patients/6712a0b1c2d3e4f5a6b7c8d9/exercise-plan').expect(404);
+      expect(res.body.code).toBe(ERROR_CODES.NOT_FOUND);
       await as(doctor).get('/patients/not-an-id/exercise-plan').expect(404);
       // A doctor's own id is not a patient.
       await as(doctor).get(`/patients/${doctor.id}/exercise-plan`).expect(404);

@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 import { DEFAULT_COMPLIANCE_DAYS, MAX_COMPLIANCE_DAYS } from '../common/constants';
 import { IsCalendarDate } from '../time/day.service';
 
@@ -56,6 +56,11 @@ export class CaseloadQueryDto {
   })
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(MAX_COMPLIANCE_DAYS)
   days?: number;
+
+  @ApiPropertyOptional({ enum: ['all', 'mine'], default: 'all', description: 'all: every active patient. mine: only patients linked to you.' })
+  @IsOptional()
+  @IsIn(['all', 'mine'])
+  scope?: 'all' | 'mine';
 }
 
 export class CaseloadCountsResponse {

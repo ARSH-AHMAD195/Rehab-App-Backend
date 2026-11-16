@@ -265,11 +265,11 @@ describe('Registration and invitations', () => {
       expect(t.identity.sentEmails).toEqual([doctor.email]);
     });
 
-    it('a doctor only for their linked patients; anyone else is 404', async () => {
+    it('a doctor for any patient; other users are 404', async () => {
       const mine = await t.seed({ role: 'PATIENT', name: 'Mine', doctorIds: [doctor.id] });
       const other = await t.seed({ role: 'PATIENT', name: 'Other' });
       await api().post(`/api/v1/users/${mine.id}/invitations`).set('Authorization', t.auth(doctor)).expect(202);
-      await api().post(`/api/v1/users/${other.id}/invitations`).set('Authorization', t.auth(doctor)).expect(404);
+      await api().post(`/api/v1/users/${other.id}/invitations`).set('Authorization', t.auth(doctor)).expect(202);
       await api().post(`/api/v1/users/${admin.id}/invitations`).set('Authorization', t.auth(doctor)).expect(404);
       await api().post('/api/v1/users/not-an-id/invitations').set('Authorization', t.auth(doctor)).expect(404);
     });

@@ -104,6 +104,16 @@ export class DoctorHasPatientsException extends ApiException {
   }
 }
 
+export class LastDoctorException extends ApiException {
+  constructor() {
+    super(
+      HttpStatus.CONFLICT,
+      ERROR_CODES.LAST_DOCTOR,
+      "You are this patient's only doctor. Another doctor must add them to their patients first.",
+    );
+  }
+}
+
 export class UserInactiveException extends ApiException {
   constructor() {
     super(HttpStatus.CONFLICT, ERROR_CODES.USER_INACTIVE, 'This user is deactivated');

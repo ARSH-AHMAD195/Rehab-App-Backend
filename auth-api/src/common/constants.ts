@@ -18,6 +18,8 @@ export const ERROR_CODES = {
   /** Same code and meaning as Health Monitoring's alert inbox. */
   ALERT_ALREADY_ACKNOWLEDGED: 'ALERT_ALREADY_ACKNOWLEDGED',
   DOCTOR_HAS_PATIENTS: 'DOCTOR_HAS_PATIENTS',
+  /** A doctor tried to unlink themselves from a patient who has no other doctor. */
+  LAST_DOCTOR: 'LAST_DOCTOR',
   USER_INACTIVE: 'USER_INACTIVE',
   CONCURRENT_UPDATE: 'CONCURRENT_UPDATE',
   RATE_LIMITED: 'RATE_LIMITED',

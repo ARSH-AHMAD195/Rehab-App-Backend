@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { FilterQuery, Types } from 'mongoose';
-import { AUDIT_ACTIONS, DEFAULT_PATIENT_TIME_ZONE, DETAIL_CODES, ROLES, Role } from '../common/constants';
+import { ClientSession, FilterQuery, Types } from 'mongoose';
+import { AUDIT_ACTIONS, DEFAULT_PATIENT_TIME_ZONE, DETAIL_CODES, MAX_DOCTORS_PER_PATIENT, ROLES, Role } from '../common/constants';
 import {
+  ConcurrentUpdateException,
   ErrorDetail,
   ForbiddenRoleException,
+  LastDoctorException,
   NotFoundException,
   ValidationFailedException,
 } from '../common/api.exception';
@@ -13,7 +15,7 @@ import { AuditService } from '../audit/audit.service';
 import { RegistrationService } from '../registration/registration.service';
 import { AccountsService } from '../users/accounts.service';
 import { listUsers } from '../users/user-directory';
-import { User } from '../users/user.schema';
+import { User, UserDocument } from '../users/user.schema';
 import { PatientListQueryDto, RegisterPatientDto, UpdatePatientDto } from '../users/user.dto';
 import { PatientResponse, UserResponses } from '../users/user.responses';
 import { UsersService } from '../users/users.service';
@@ -75,16 +77,23 @@ export class PatientsService {
     return { ...patient, invitation };
   }
 
-  /** GET /patients: a doctor's linked patients, or every patient for an admin. */
+  /** GET /patients: every patient (a doctor may narrow it to their own with scope=mine). */
   async list(actor: Actor, query: PatientListQueryDto): Promise<{ data: PatientResponse[]; nextCursor: string | null }> {
     if (query.doctorId && actor.role !== ROLES.ADMIN) {
       throw new ValidationFailedException([
         { field: 'doctorId', code: DETAIL_CODES.NOT_ALLOWED, issue: 'is an admin-only filter' },
       ]);
     }
+    if (query.scope && actor.role !== ROLES.DOCTOR) {
+      throw new ValidationFailedException([
+        { field: 'scope', code: DETAIL_CODES.NOT_ALLOWED, issue: 'is a doctor-only filter; admins use doctorId' },
+      ]);
+    }
     const scope: FilterQuery<User> =
       actor.role === ROLES.DOCTOR
-        ? { doctorIds: new Types.ObjectId(actor.id) }
+        ? query.scope === 'mine'
+          ? { doctorIds: new Types.ObjectId(actor.id) }
+          : {}
         : query.doctorId
           ? { doctorIds: new Types.ObjectId(query.doctorId) }
           : {};
@@ -147,6 +156,76 @@ export class PatientsService {
     }
 
     const [response] = await this.responses.patients([saved]);
+    return response;
+  }
+
+  /**
+   * PUT /patients/:patientId/doctors/me: the calling doctor adds the patient to
+   * "my patients" (their alerts and login-code requests reach this doctor's
+   * inbox). Doing it again changes nothing.
+   */
+  async linkMe(doctor: Actor, patientId: string): Promise<PatientResponse> {
+    const patient = await this.users.getByRole(patientId, ROLES.PATIENT, 'Patient not found');
+    if (patient.doctorIds.some((id) => String(id) === doctor.id)) return this.respond(patient);
+    if (patient.doctorIds.length >= MAX_DOCTORS_PER_PATIENT) {
+      throw new ValidationFailedException([
+        { field: 'doctorIds', code: DETAIL_CODES.OUT_OF_RANGE, issue: `a patient can have at most ${MAX_DOCTORS_PER_PATIENT} doctors` },
+      ]);
+    }
+    const me = new Types.ObjectId(doctor.id);
+    const saved = await this.tx.run(async (session) => {
+      const updated = await this.users.model
+        .findOneAndUpdate(
+          { _id: patient._id, [`doctorIds.${MAX_DOCTORS_PER_PATIENT - 1}`]: { $exists: false } },
+          { $addToSet: { doctorIds: me } },
+          { new: true, session },
+        )
+        .exec();
+      if (!updated) throw new ConcurrentUpdateException();
+      await this.recordLinks(doctor, patient, updated, session);
+      return updated;
+    });
+    return this.respond(saved);
+  }
+
+  /**
+   * DELETE /patients/:patientId/doctors/me: the calling doctor takes the patient
+   * off "my patients". They can still open the chart. Refused with 409
+   * LAST_DOCTOR when no doctor would be left. Doing it again changes nothing.
+   */
+  async unlinkMe(doctor: Actor, patientId: string): Promise<PatientResponse> {
+    const patient = await this.users.getByRole(patientId, ROLES.PATIENT, 'Patient not found');
+    if (!patient.doctorIds.some((id) => String(id) === doctor.id)) return this.respond(patient);
+    if (patient.doctorIds.length <= 1) throw new LastDoctorException();
+    const me = new Types.ObjectId(doctor.id);
+    const saved = await this.tx.run(async (session) => {
+      // Only while another doctor stays on: two doctors leaving at once can't strand the patient.
+      const updated = await this.users.model
+        .findOneAndUpdate({ _id: patient._id, doctorIds: me, 'doctorIds.1': { $exists: true } }, { $pull: { doctorIds: me } }, { new: true, session })
+        .exec();
+      if (!updated) throw new LastDoctorException();
+      await this.recordLinks(doctor, patient, updated, session);
+      return updated;
+    });
+    return this.respond(saved);
+  }
+
+  private recordLinks(actor: Actor, before: UserDocument, after: UserDocument, session: ClientSession) {
+    return this.audit.record(
+      {
+        actor,
+        action: AUDIT_ACTIONS.DOCTOR_LINKS_CHANGED,
+        patientId: before._id,
+        resourceId: String(before._id),
+        before: { doctorIds: before.doctorIds.map(String) },
+        after: { doctorIds: after.doctorIds.map(String) },
+      },
+      session,
+    );
+  }
+
+  private async respond(patient: UserDocument): Promise<PatientResponse> {
+    const [response] = await this.responses.patients([patient]);
     return response;
   }
 
