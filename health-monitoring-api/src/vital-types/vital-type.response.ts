@@ -10,6 +10,8 @@ export class FieldRangeResponse {
 export class VitalTypeResponse {
   @ApiProperty({ example: 'BP' }) type!: string;
   @ApiProperty({ example: 'Blood pressure' }) label!: string;
+  @ApiProperty({ example: null, nullable: true, type: String, description: 'The Hindi label; null: show `label`' })
+  labelHi!: string | null;
   @ApiProperty({ example: 'mmHg', nullable: true }) unit!: string | null;
   @ApiProperty({ enum: ['numeric', 'pair', 'scale', 'text'] }) valueKind!: string;
 
@@ -52,6 +54,7 @@ export function toVitalTypeResponse(def: VitalTypeDef): VitalTypeResponse {
   return {
     type: def.type,
     label: def.label,
+    labelHi: def.labelHi ?? null,
     unit: def.unit,
     valueKind: def.valueKind,
     ...(def.minValid !== null ? { minValid: def.minValid } : {}),

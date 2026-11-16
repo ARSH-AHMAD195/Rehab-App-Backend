@@ -15,9 +15,9 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, PLAN_LIMITS } from '../common/constants';
+import { DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, PLAN_LIMITS, SPIROMETRY } from '../common/constants';
 import { trim } from '../categories/category.dto';
-import { ExerciseResponse } from '../exercises/exercise.dto';
+import { ExerciseResponse, HindiTextResponse } from '../exercises/exercise.dto';
 
 export class ScheduleDto {
   @ApiProperty({ example: [1, 3, 5], description: '1 = Monday ... 7 = Sunday' })
@@ -42,7 +42,13 @@ export class TargetDto {
   @ApiPropertyOptional({ example: null })
   @IsOptional() @IsInt() @Min(1) @Max(PLAN_LIMITS.DURATION_MIN)
   durationMin?: number | null;
+
+  @ApiPropertyOptional({ example: 1500, description: 'Incentive spirometry: the volume to reach, in mL. Only for exercises that record a volume.' })
+  @IsOptional() @IsInt() @Min(1) @Max(SPIROMETRY.MAX_VOLUME_ML)
+  volumeMl?: number | null;
 }
+
+export type PlanTargetValues = { sets: number | null; reps: number | null; durationMin: number | null; volumeMl: number | null };
 
 export class PlanItemDto {
   @ApiProperty()
@@ -91,6 +97,8 @@ export class PlanExerciseResponse {
   @ApiProperty({ example: 'STRENGTH' }) category!: string;
   @ApiProperty({ nullable: true, type: String }) description!: string | null;
   @ApiProperty({ type: [String] }) instructions!: string[];
+  @ApiProperty({ type: HindiTextResponse }) hi!: HindiTextResponse;
+  @ApiProperty({ description: 'true: ask for the volume reached (mL) with each tick' }) recordsVolume!: boolean;
   @ApiProperty({ nullable: true }) video!: ExerciseResponse['video'];
   @ApiProperty({ description: 'false if an admin deactivated it after it was planned' }) active!: boolean;
 }
@@ -100,7 +108,7 @@ export class PlanItemResponse {
   @ApiProperty({ type: PlanExerciseResponse }) exercise!: PlanExerciseResponse;
   @ApiProperty({ type: ScheduleDto }) schedule!: { daysOfWeek: number[]; timesPerDay: number };
   @ApiProperty({ type: TargetDto, nullable: true })
-  target!: { sets: number | null; reps: number | null; durationMin: number | null } | null;
+  target!: PlanTargetValues | null;
   @ApiProperty({ nullable: true, type: String }) notes!: string | null;
 }
 

@@ -16,6 +16,10 @@ export class ExerciseCategory {
   @Prop({ required: true })
   name!: string;
 
+  /** Null until the clinic supplies it; the app falls back to `name`. */
+  @Prop({ type: String, default: null })
+  nameHi!: string | null;
+
   /** Display order. */
   @Prop({ required: true, default: 0 })
   order!: number;

@@ -21,6 +21,19 @@ writes it.
 - Compliance for doctors: planned against done, per day and per exercise (the percentage
   waits for the client's formula)
 
+- **Incentive spirometry** (client change request, Nov 2026, section 6.2): added to the library
+  on first start, under Breathing, with `code: "INCENTIVE_SPIROMETRY"` and `recordsVolume: true`.
+  Name only; the clinic adds the steps, video and Hindi text like any other edit, and later starts
+  never overwrite them. The doctor sets the volume to reach in the plan (`target.volumeMl`); the
+  patient sends the volume reached with each tick (`details.volumeMl`, whole mL, 0-5000, which is
+  the usual spirometer scale and only a typing-mistake check). Both are refused on exercises
+  without `recordsVolume`. An admin can set `recordsVolume` on another exercise too.
+
+- **Hindi** (section 6.3): every exercise has `hi: { name, description, instructions }` and every
+  category has `nameHi`. Empty until the clinic supplies the text; the app shows the English for
+  any part left empty, and picks the language from the patient's `preferredLanguage` (Auth API).
+  Sending `hi` replaces the whole Hindi part; `hi: null` removes it.
+
 A journey test that runs this API with Auth and Health Monitoring on one database is in
 `integration-tests/` at the top of the repo. Still waiting on the client: reference, section 9.
 

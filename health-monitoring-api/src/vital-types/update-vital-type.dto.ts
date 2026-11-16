@@ -29,6 +29,10 @@ export class UpdateVitalTypeDto {
   @IsOptional() @IsString() @MinLength(1) @MaxLength(60)
   label?: string;
 
+  @ApiPropertyOptional({ example: 'रक्तचाप', nullable: true, description: 'The Hindi label. null removes it.' })
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(60)
+  labelHi?: string | null;
+
   @ApiPropertyOptional({ example: 50 })
   @IsOptional() @IsNumber()
   minValid?: number;

@@ -218,6 +218,13 @@ These are the clinical and product answers the module is waiting on. None of the
 5. Can patients correct a previous day? (read-only for now) — **clinical team**
 6. Should a day be COMPLETE without optional blood sugar? — **frontend**
 
+## Hindi labels
+Client change request, Nov 2026, section 6.3. Every parameter in `GET /vital-types` has a
+`labelHi`, null until the clinic supplies it (the app then shows `label`). An admin sets it with
+`PUT /admin/vital-types/:type { labelHi }`; like any other change it raises the version and is
+audited. The diet chart already carries `{ en, hi }` labels (below). The app picks the language from
+the patient's `preferredLanguage` (Auth API).
+
 ## Nutrition (diet chart and meal logging)
 Client change request, Nov 2026, section 5. Code in `src/nutrition/`.
 

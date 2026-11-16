@@ -153,6 +153,7 @@ export class VitalTypesService implements OnModuleInit {
     const keys = [
       'unit',
       'label',
+      'labelHi',
       'minValid',
       'maxValid',
       'isOptional',

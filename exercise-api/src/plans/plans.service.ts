@@ -21,6 +21,7 @@ import {
   PlanItemDto,
   PlanItemResponse,
   PlanResponse,
+  PlanTargetValues,
   PlanVersionListResponse,
   PlanVersionsQueryDto,
   SavePlanDto,
@@ -31,7 +32,7 @@ interface StoredItem {
   itemId: string;
   exerciseId: string;
   schedule: { daysOfWeek: number[]; timesPerDay: number };
-  target: { sets: number | null; reps: number | null; durationMin: number | null } | null;
+  target: PlanTargetValues | null;
   notes: string | null;
 }
 
@@ -235,6 +236,8 @@ export class PlansService implements OnModuleInit {
           category: exercise.category,
           description: exercise.description,
           instructions: exercise.instructions,
+          hi: exercise.hi,
+          recordsVolume: exercise.recordsVolume,
           video: exercise.video,
           active: exercise.active,
         },
@@ -264,13 +267,20 @@ export class PlansService implements OnModuleInit {
   }
 
   /** Every exercise must exist and be active (reference section 4, Plans). */
-  private assertPlannable(items: PlanItemDto[], found: Map<string, { active: boolean }>): void {
+  private assertPlannable(items: PlanItemDto[], found: Map<string, { active: boolean; recordsVolume?: boolean }>): void {
     const details: ErrorDetail[] = [];
     items.forEach((item, index) => {
       const exercise = found.get(item.exerciseId.toLowerCase());
       const field = `items.${index}.exerciseId`;
       if (!exercise) details.push({ field, code: DETAIL_CODES.UNKNOWN_ID, issue: 'is not an exercise in the library' });
       else if (!exercise.active) details.push({ field, code: DETAIL_CODES.NOT_ALLOWED, issue: 'is a deactivated exercise' });
+      else if (item.target?.volumeMl != null && !exercise.recordsVolume) {
+        details.push({
+          field: `items.${index}.target.volumeMl`,
+          code: DETAIL_CODES.NOT_ALLOWED,
+          issue: 'is only for exercises that record a volume (incentive spirometry)',
+        });
+      }
     });
     if (details.length) throw new ValidationFailedException(details);
   }
@@ -280,9 +290,7 @@ export class PlansService implements OnModuleInit {
     const existing = new Map(before.map((item) => [item.exerciseId, item.itemId]));
     return items.map((item) => {
       const exerciseId = item.exerciseId.toLowerCase();
-      const target = item.target
-        ? { sets: item.target.sets ?? null, reps: item.target.reps ?? null, durationMin: item.target.durationMin ?? null }
-        : null;
+      const target = item.target ? toTarget(item.target) : null;
       return {
         itemId: existing.get(exerciseId) ?? new Types.ObjectId().toHexString(),
         exerciseId,
@@ -335,10 +343,17 @@ function toStoredItem(item: PlanItem): StoredItem {
     itemId: item.itemId,
     exerciseId: String(item.exerciseId),
     schedule: { daysOfWeek: [...item.schedule.daysOfWeek], timesPerDay: item.schedule.timesPerDay },
-    target: item.target
-      ? { sets: item.target.sets ?? null, reps: item.target.reps ?? null, durationMin: item.target.durationMin ?? null }
-      : null,
+    target: item.target ? toTarget(item.target) : null,
     notes: item.notes ?? null,
+  };
+}
+
+function toTarget(target: Partial<Record<keyof PlanTargetValues, number | null>>): PlanTargetValues {
+  return {
+    sets: target.sets ?? null,
+    reps: target.reps ?? null,
+    durationMin: target.durationMin ?? null,
+    volumeMl: target.volumeMl ?? null,
   };
 }
 

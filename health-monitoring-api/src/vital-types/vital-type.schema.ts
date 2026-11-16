@@ -25,6 +25,10 @@ export class VitalTypeDef {
   @Prop({ required: true })
   label!: string;
 
+  /** The Hindi label. Null until the clinic supplies it; the app falls back to `label`. */
+  @Prop({ type: String, default: null })
+  labelHi!: string | null;
+
   /** NUTRITION has no unit. */
   @Prop({ type: String, default: null })
   unit!: string | null;

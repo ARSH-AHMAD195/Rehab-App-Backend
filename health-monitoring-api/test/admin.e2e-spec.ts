@@ -241,6 +241,19 @@ describe('Admin endpoints (v1.1 /admin)', () => {
       expect(res.body.version).toBe(3);
     });
 
+    it('takes a Hindi label, which the form then shows; null removes it', async () => {
+      const before = await as(admin, 'get', '/api/v1/vital-types').expect(200);
+      expect(before.body.data.find((t: { type: string }) => t.type === 'BP').labelHi).toBeNull();
+
+      const saved = await as(admin, 'put', '/api/v1/admin/vital-types/BP').send({ labelHi: 'रक्तचाप' }).expect(200);
+      expect(saved.body).toMatchObject({ type: 'BP', label: 'Blood pressure', labelHi: 'रक्तचाप', version: 2 });
+      const after = await as(admin, 'get', '/api/v1/vital-types').expect(200);
+      expect(after.body.data.find((t: { type: string }) => t.type === 'BP').labelHi).toBe('रक्तचाप');
+
+      const cleared = await as(admin, 'put', '/api/v1/admin/vital-types/BP').send({ labelHi: null }).expect(200);
+      expect(cleared.body.labelHi).toBeNull();
+    });
+
     it('raises the version and applies to later saves', async () => {
       const res = await as(admin, 'put', '/api/v1/admin/vital-types/PULSE')
         .send({ minValid: 40, maxValid: 180 })

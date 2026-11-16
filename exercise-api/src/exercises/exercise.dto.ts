@@ -14,6 +14,7 @@ import {
   Min,
   MinLength,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 import { DEFAULT_PAGE_LIMIT, LIMITS, MAX_PAGE_LIMIT } from '../common/constants';
 import { trim } from '../categories/category.dto';
@@ -21,8 +22,39 @@ import { trim } from '../categories/category.dto';
 const trimEach = ({ value }: { value: unknown }) =>
   Array.isArray(value) ? value.map((step) => (typeof step === 'string' ? step.trim() : step)) : value;
 
+/** The Hindi text. Sent whole: it replaces what was there. Leave a part out to fall back to English. */
+export class ExerciseHindiDto {
+  @ApiPropertyOptional({ example: 'बैठकर घुटना सीधा करना', nullable: true })
+  @IsOptional()
+  @Transform(trim)
+  @IsString() @MaxLength(LIMITS.EXERCISE_NAME)
+  name?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @Transform(trim)
+  @IsString() @MaxLength(LIMITS.DESCRIPTION)
+  description?: string | null;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @Transform(trimEach)
+  @IsArray() @ArrayMaxSize(LIMITS.INSTRUCTION_STEPS)
+  @IsString({ each: true }) @MinLength(1, { each: true }) @MaxLength(LIMITS.INSTRUCTION_STEP, { each: true })
+  instructions?: string[];
+}
+
 /** Fields shared by create and update. On update every one is optional. */
 abstract class ExerciseFieldsDto {
+  @ApiPropertyOptional({ type: ExerciseHindiDto, nullable: true, description: 'Hindi text. null removes it.' })
+  @IsOptional() @ValidateNested() @Type(() => ExerciseHindiDto)
+  hi?: ExerciseHindiDto | null;
+
+  @ApiPropertyOptional({ description: 'true: the patient records the volume reached, in mL, with each tick (incentive spirometry).' })
+  @ValidateIf((_, value) => value !== undefined)
+  @IsBoolean()
+  recordsVolume?: boolean;
+
   @ApiPropertyOptional({ example: 'Strengthens the thigh muscles.', nullable: true })
   @IsOptional()
   @Transform(trim)
@@ -111,6 +143,12 @@ export class CreatedByResponse {
   @ApiProperty({ example: 'DOCTOR', enum: ['ADMIN', 'DOCTOR'] }) role!: string;
 }
 
+export class HindiTextResponse {
+  @ApiProperty({ nullable: true, type: String, description: 'null: show the English' }) name!: string | null;
+  @ApiProperty({ nullable: true, type: String }) description!: string | null;
+  @ApiProperty({ type: [String], description: 'Empty: show the English steps' }) instructions!: string[];
+}
+
 export class ExerciseResponse {
   @ApiProperty() id!: string;
   @ApiProperty({ example: 'Seated knee extension' }) name!: string;
@@ -118,6 +156,11 @@ export class ExerciseResponse {
   @ApiProperty({ example: 'STRENGTH', description: 'The category code' }) category!: string;
   @ApiProperty({ nullable: true, type: String }) description!: string | null;
   @ApiProperty({ type: [String] }) instructions!: string[];
+  @ApiProperty({ type: HindiTextResponse, description: 'Always present; empty parts until the Hindi text is added' })
+  hi!: HindiTextResponse;
+  @ApiProperty({ nullable: true, type: String, example: 'INCENTIVE_SPIROMETRY', description: 'Set only on exercises the API adds itself' })
+  code!: string | null;
+  @ApiProperty({ description: 'true: ask for the volume reached (mL) with each tick' }) recordsVolume!: boolean;
   @ApiProperty({ type: VideoResponse, nullable: true }) video!: VideoResponse | null;
   @ApiProperty() active!: boolean;
   @ApiProperty({ type: CreatedByResponse, nullable: true, description: 'null for exercises added before this was recorded' })
