@@ -32,20 +32,13 @@ export class UsersService {
   }
 
   /**
-   * A doctor reaches only patients linked to them. One query answers both
-   * "does this patient exist" and "is it linked", so an unlinked patient and
-   * a missing one look the same from outside (both 404).
+   * Every doctor may see every patient (team decision, Nov 2026); the link
+   * (`doctorIds`) only marks "my patients". So this asks just whether the
+   * patient exists and is active: deactivated and unknown both give 404.
    */
-  async isPatientLinkedToDoctor(patientId: string, doctorId: string): Promise<boolean> {
+  async isActivePatient(patientId: string): Promise<boolean> {
     if (!Types.ObjectId.isValid(patientId)) return false;
-    const match = await this.users
-      .exists({
-        _id: new Types.ObjectId(patientId),
-        role: ROLES.PATIENT,
-        active: true,
-        doctorIds: new Types.ObjectId(doctorId),
-      })
-      .exec();
+    const match = await this.users.exists({ _id: new Types.ObjectId(patientId), role: ROLES.PATIENT, active: true }).exec();
     return match !== null;
   }
 
@@ -57,10 +50,10 @@ export class UsersService {
     return patient ? this.toAuthUser(patient as UserDocument) : null;
   }
 
-  /** A doctor's caseload: the active patients linked to them, by name. */
-  async patientsOf(doctorId: string): Promise<AuthUser[]> {
+  /** The caseload, by name: every active patient, or (`mine`) only those linked to the doctor. */
+  async patientsFor(doctorId: string, scope: 'all' | 'mine'): Promise<AuthUser[]> {
     const patients = await this.users
-      .find({ role: ROLES.PATIENT, active: true, doctorIds: new Types.ObjectId(doctorId) })
+      .find({ role: ROLES.PATIENT, active: true, ...(scope === 'mine' ? { doctorIds: new Types.ObjectId(doctorId) } : {}) })
       .sort({ name: 1, _id: 1 })
       .lean();
     return patients.map((patient) => this.toAuthUser(patient as UserDocument));

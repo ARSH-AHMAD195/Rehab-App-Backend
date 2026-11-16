@@ -36,6 +36,7 @@ class RequestPatientDoc {
 class LoginCodeRequestDoc {
   @ApiProperty({ type: RequestPatientDoc }) patient!: RequestPatientDoc;
   @ApiProperty({ type: String, nullable: true, example: '2026-11-10T09:15:00+05:30' }) requestedAt!: string | null;
+  @ApiProperty({ description: 'Linked to you ("my patient"). These come first.' }) myPatient!: boolean;
 }
 
 class LoginCodeRequestListDoc {
@@ -97,7 +98,9 @@ export class LoginCodeIssueController {
   @Get('doctor/login-code-requests')
   @ApiOperation({
     summary: 'Patients waiting for a login code',
-    description: 'Doctor: linked patients. Admin: every patient. Requests from the last 24 hours, newest first.',
+    description:
+      'Every patient waiting, from the last 24 hours: any doctor may make the code. For a doctor, their own (linked) patients come first, ' +
+      'flagged myPatient; then newest first.',
   })
   @ApiOkResponse({ type: LoginCodeRequestListDoc })
   openRequests(@CurrentUser() caller: AuthUser): Promise<{ data: LoginCodeRequestResponse[] }> {

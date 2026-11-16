@@ -79,16 +79,13 @@ export class UsersService {
   }
 
   /**
-   * A patient the caller may manage: any patient for an admin, a linked one
-   * for a doctor. Unknown and unlinked look the same - 404 - so a doctor
-   * can't tell whether a patient exists (v1.0, Access rules).
+   * A patient the caller may manage. Every doctor (and admin) may manage
+   * every patient - team decision, Nov 2026. The link (`doctorIds`) now only
+   * marks "my patients": whose inboxes get the patient's alerts and login-code
+   * requests, and what the "mine" filters show.
    */
-  async getPatientFor(caller: { id: string; role: Role }, patientId: string): Promise<UserDocument> {
-    const patient = await this.getByRole(patientId, ROLES.PATIENT, 'Patient not found');
-    if (caller.role === ROLES.DOCTOR && !patient.doctorIds.some((id) => String(id) === caller.id)) {
-      throw new NotFoundException('Patient not found');
-    }
-    return patient;
+  async getPatientFor(_caller: { id: string; role: Role }, patientId: string): Promise<UserDocument> {
+    return this.getByRole(patientId, ROLES.PATIENT, 'Patient not found');
   }
 
   /** Names of the given doctors, for the `doctors: [{ id, name }]` fields. */

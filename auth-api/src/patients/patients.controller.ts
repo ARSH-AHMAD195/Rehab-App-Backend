@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiConflictResponse, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PatientListDoc, PatientResponseDoc, RegisteredPatientDoc } from '../common/response-docs';
 import { RATE_LIMITS, ROLES } from '../common/constants';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -11,8 +11,8 @@ import { PatientResponse } from '../users/user.responses';
 import { PatientsService } from './patients.service';
 
 /**
- * Patient management. A doctor reaches only linked patients; any other id is
- * 404 to them, so they can't tell whether that patient exists.
+ * Patient management. Every doctor reaches every patient (team decision,
+ * Nov 2026). The doctor-patient link only marks "my patients".
  */
 @ApiTags('Patients (doctor, admin)')
 @ApiBearerAuth()
@@ -33,7 +33,7 @@ export class PatientsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Patient list', description: 'Doctor: linked patients only. Admin: all.' })
+  @ApiOperation({ summary: 'Patient list', description: 'Every patient. Doctor: scope=mine for only the patients linked to you. Admin: doctorId to filter.' })
   @ApiOkResponse({ type: PatientListDoc })
   list(
     @CurrentUser() caller: AuthUser,
@@ -58,6 +58,29 @@ export class PatientsController {
     @Body() body: UpdatePatientDto,
   ): Promise<PatientResponse> {
     return this.patients.update(caller, patientId, body);
+  }
+
+  @Put(':patientId/doctors/me')
+  @Roles(ROLES.DOCTOR)
+  @ApiOperation({
+    summary: 'Add this patient to my patients',
+    description: "Links you to the patient: their alerts and login-code requests reach your inbox. Doing it again changes nothing. Audited.",
+  })
+  @ApiOkResponse({ type: PatientResponseDoc })
+  linkMe(@CurrentUser() doctor: AuthUser, @Param('patientId') patientId: string): Promise<PatientResponse> {
+    return this.patients.linkMe(doctor, patientId);
+  }
+
+  @Delete(':patientId/doctors/me')
+  @Roles(ROLES.DOCTOR)
+  @ApiOperation({
+    summary: 'Take this patient off my patients',
+    description: 'You can still open their chart. 409 LAST_DOCTOR if no other doctor is linked. Doing it again changes nothing. Audited.',
+  })
+  @ApiOkResponse({ type: PatientResponseDoc })
+  @ApiConflictResponse({ description: 'LAST_DOCTOR - you are the only doctor linked to this patient' })
+  unlinkMe(@CurrentUser() doctor: AuthUser, @Param('patientId') patientId: string): Promise<PatientResponse> {
+    return this.patients.unlinkMe(doctor, patientId);
   }
 
   @Put(':patientId/doctors')

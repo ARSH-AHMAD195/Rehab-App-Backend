@@ -208,8 +208,8 @@ describe('Triage tag', () => {
   });
 
   describe('access and new fields', () => {
-    it('an unlinked doctor gets 404; admins and patients 403', async () => {
-      await triage(otherDoctor).expect(404);
+    it('any doctor may read it, linked or not; admins and patients 403', async () => {
+      await triage(otherDoctor).expect(200);
       await triage(admin).expect(403);
       await triage(patient).expect(403);
     });

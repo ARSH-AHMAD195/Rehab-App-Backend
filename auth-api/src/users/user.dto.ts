@@ -240,4 +240,13 @@ export class PatientListQueryDto extends UserListQueryDto {
   @IsOptional()
   @IsMongoId()
   doctorId?: string;
+
+  @ApiPropertyOptional({
+    enum: ['all', 'mine'],
+    default: 'all',
+    description: 'Doctor only. all: every patient. mine: only the patients linked to you ("my patients").',
+  })
+  @IsOptional()
+  @IsIn(['all', 'mine'])
+  scope?: 'all' | 'mine';
 }

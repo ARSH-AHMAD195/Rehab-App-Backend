@@ -369,7 +369,7 @@ describe('Checklist, completions and history', () => {
       await as(patient).get('/patients/me/exercise-completions?cursor=rubbish').expect(400);
     });
 
-    it("shows a linked doctor the patient's history, audited, and nobody else", async () => {
+    it("shows any doctor the patient's history, audited, and not the patient on the doctor route", async () => {
       const ids = await assign(0, [{ exerciseId: kneeId }]);
       await tick(ids[kneeId]).expect(201);
 
@@ -377,7 +377,8 @@ describe('Checklist, completions and history', () => {
       expect(res.body.data).toHaveLength(1);
       expect(await ctx.connection.collection('auditLogs').countDocuments({ action: 'EXERCISE_PLAN_VIEWED' })).toBe(1);
 
-      await as(otherDoctor).get(`/patients/${patient.id}/exercise-completions`).expect(404);
+      // Every doctor sees every patient
+      await as(otherDoctor).get(`/patients/${patient.id}/exercise-completions`).expect(200);
       await as(patient).get(`/patients/${patient.id}/exercise-completions`).expect(403);
     });
   });
@@ -404,12 +405,12 @@ describe('Checklist, completions and history', () => {
       expect(before.body).toMatchObject({ planVersion: 0, items: [] });
     });
 
-    it('refuses a future date and keeps unlinked doctors out', async () => {
+    it('refuses a future date; any doctor may look', async () => {
       const tomorrow = now().plus({ days: 1 }).toISODate();
       const res = await as(doctor).get(`/patients/${patient.id}/exercise-checklist?date=${tomorrow}`).expect(400);
       expect(res.body.details[0]).toMatchObject({ field: 'date', code: DETAIL_CODES.OUT_OF_RANGE });
 
-      await as(otherDoctor).get(`/patients/${patient.id}/exercise-checklist`).expect(404);
+      await as(otherDoctor).get(`/patients/${patient.id}/exercise-checklist`).expect(200);
       await as(doctor).get('/patients/me/exercise-checklist').expect(403);
     });
 

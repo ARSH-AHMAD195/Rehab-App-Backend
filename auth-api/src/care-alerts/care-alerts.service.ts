@@ -58,7 +58,11 @@ export class CareAlertsService {
     private readonly tx: TransactionRunner,
   ) {}
 
-  /** GET /doctor/care-alerts: the caller's patients' alerts, newest first, checked for new ones first. */
+  /**
+   * GET /doctor/care-alerts, newest first, checked for new ones first. Without
+   * patientId: the inbox, i.e. the caller's linked patients. With it: that
+   * patient, for any doctor.
+   */
   async inbox(
     doctor: Actor,
     query: { status?: CareAlertStatus | 'ALL'; patientId?: string; limit?: number; cursor?: string },
@@ -94,13 +98,12 @@ export class CareAlertsService {
     };
   }
 
-  /** PATCH /doctor/care-alerts/:alertId: any linked doctor, once. */
+  /** PATCH /doctor/care-alerts/:alertId: any doctor, once. */
   async acknowledge(doctor: Actor, alertId: string, note: string | null): Promise<CareAlertResponse> {
     const id = toObjectId(alertId);
     const alert = id ? await this.alerts.findById(id).exec() : null;
-    // An alert of a patient this doctor isn't linked to looks like no alert at all.
     const patient = alert ? await this.users.model.findOne({ _id: alert.patientId, role: ROLES.PATIENT }).exec() : null;
-    if (!alert || !patient || !patient.doctorIds.some((d) => String(d) === doctor.id)) {
+    if (!alert || !patient) {
       throw new NotFoundException('Alert not found');
     }
     if (alert.status === CARE_ALERT_STATUS.ACKNOWLEDGED) throw new AlertAlreadyAcknowledgedException();

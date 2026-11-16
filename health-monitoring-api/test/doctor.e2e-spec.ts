@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { DateTime } from 'luxon';
+import { Types } from 'mongoose';
 import { ALERT_STATUS, ERROR_CODES, EVENT_TYPES } from '../src/common/constants';
 import { TestContext, TestUser, createTestApp } from './helpers/test-app';
 
@@ -107,8 +108,16 @@ describe('Doctor endpoints and the alert lifecycle (v1.1 /doctor)', () => {
       expect(String(entries[0].patientId)).toBe(patient.id);
     });
 
-    it('hides a patient who is not linked behind the same 404 as one who does not exist', async () => {
-      const notLinked = await as(
+    it('lets a doctor see a patient who is not linked to them (every doctor sees every patient)', async () => {
+      await as(doctor, 'get', `/api/v1/doctor/patients/${unlinked.id}/vitals/today`).expect(200);
+      await expect(
+        ctx.connection.collection('auditLogs').countDocuments({ action: 'PATIENT_VITALS_VIEWED' }),
+      ).resolves.toBe(1);
+    });
+
+    it('gives the same 404 for a deactivated patient as for one who does not exist', async () => {
+      await ctx.connection.collection('users').updateOne({ _id: new Types.ObjectId(unlinked.id) }, { $set: { active: false } });
+      const deactivated = await as(
         doctor,
         'get',
         `/api/v1/doctor/patients/${unlinked.id}/vitals/today`,
@@ -119,8 +128,8 @@ describe('Doctor endpoints and the alert lifecycle (v1.1 /doctor)', () => {
         '/api/v1/doctor/patients/6701f0a9e4b0f1a2b3c4d999/vitals/today',
       ).expect(404);
 
-      expect(notLinked.body.code).toBe(ERROR_CODES.NOT_FOUND);
-      expect(notLinked.body.message).toBe(missing.body.message);
+      expect(deactivated.body.code).toBe(ERROR_CODES.NOT_FOUND);
+      expect(deactivated.body.message).toBe(missing.body.message);
       // Nothing is audited for a refused access.
       await expect(
         ctx.connection.collection('auditLogs').countDocuments({ action: 'PATIENT_VITALS_VIEWED' }),
@@ -303,7 +312,7 @@ describe('Doctor endpoints and the alert lifecycle (v1.1 /doctor)', () => {
       expect(saved.body.alerts[0]).toMatchObject({ rule: 'BELOW_LOW', threshold: 92, severity: 'HIGH' });
     });
 
-    it('filters the queue by status and patient, and 404s for an unlinked patient', async () => {
+    it('filters the queue by status and patient; patientId works for any patient', async () => {
       await setLimit({ field: null, low: null, high: 6, severity: 'MEDIUM' });
       await save({ PAIN: { num: 7 } });
 
@@ -313,10 +322,14 @@ describe('Doctor endpoints and the alert lifecycle (v1.1 /doctor)', () => {
       const acknowledged = await as(doctor, 'get', '/api/v1/doctor/alerts?status=ACKNOWLEDGED').expect(200);
       expect(acknowledged.body.data).toHaveLength(0);
 
-      await as(doctor, 'get', `/api/v1/doctor/alerts?patientId=${unlinked.id}`).expect(404);
+      // Any doctor may look at any patient's alerts on their chart
+      const other = await as(otherDoctor, 'get', `/api/v1/doctor/alerts?patientId=${patient.id}`).expect(200);
+      expect(other.body.data).toHaveLength(1);
+      await as(doctor, 'get', `/api/v1/doctor/alerts?patientId=${unlinked.id}`).expect(200);
+      await as(doctor, 'get', '/api/v1/doctor/alerts?patientId=6701f0a9e4b0f1a2b3c4d999').expect(404);
     });
 
-    it('shows a doctor only their own patients’ alerts', async () => {
+    it('keeps the inbox (no patientId) to the doctor’s own patients', async () => {
       await setLimit({ field: null, low: null, high: 6, severity: 'MEDIUM' });
       await save({ PAIN: { num: 7 } });
 
@@ -407,12 +420,15 @@ describe('Doctor endpoints and the alert lifecycle (v1.1 /doctor)', () => {
         .expect(400);
     });
 
-    it('404s for an unknown alert, and for one belonging to another doctor', async () => {
+    it('lets any doctor acknowledge, not only a linked one', async () => {
       const alertId = await raiseAlert();
-
-      await as(otherDoctor, 'patch', `/api/v1/doctor/alerts/${alertId}`)
+      const res = await as(otherDoctor, 'patch', `/api/v1/doctor/alerts/${alertId}`)
         .send({ status: 'ACKNOWLEDGED' })
-        .expect(404);
+        .expect(200);
+      expect(res.body.status).toBe('ACKNOWLEDGED');
+    });
+
+    it('404s for an unknown alert', async () => {
       await as(doctor, 'patch', '/api/v1/doctor/alerts/6701f0a9e4b0f1a2b3c4d999')
         .send({ status: 'ACKNOWLEDGED' })
         .expect(404);

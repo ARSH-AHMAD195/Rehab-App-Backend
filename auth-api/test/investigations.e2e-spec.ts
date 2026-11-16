@@ -187,10 +187,10 @@ describe('Investigations (PAC grid)', () => {
   });
 
   describe('access', () => {
-    it('an unlinked doctor gets 404 and nothing is audited', async () => {
-      await grid('', otherDoctor).expect(404);
-      await add({ test: 'HB', takenOn: daysAgo(1), values: { value: 11 } }, otherDoctor).expect(404);
-      expect(await t.connection.collection('auditLogs').countDocuments({ action: /^INVESTIGATION/ })).toBe(0);
+    it('any doctor may read and add results, linked or not, audited', async () => {
+      await grid('', otherDoctor).expect(200);
+      await add({ test: 'HB', takenOn: daysAgo(1), values: { value: 11 } }, otherDoctor).expect(201);
+      expect(await t.connection.collection('auditLogs').countDocuments({ action: /^INVESTIGATION/ })).toBe(2);
     });
 
     it('admins and patients cannot read or add results', async () => {

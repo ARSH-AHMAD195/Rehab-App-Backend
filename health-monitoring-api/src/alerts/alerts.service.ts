@@ -170,7 +170,8 @@ export class AlertsService {
 
   /**
    * GET /doctor/alerts: alerts across the doctor's patients, newest first.
-   * `patientId` is validated by the caller (404 when not linked).
+   * Without `patientId`: the doctor's linked patients (the inbox). With it:
+   * that patient, already checked by the caller (404 when not active).
    */
   async listForDoctor(
     doctor: AuthUser,
@@ -225,10 +226,9 @@ export class AlertsService {
     if (!Types.ObjectId.isValid(alertId)) throw new NotFoundException('Alert not found');
 
     const alert = await this.model.findById(alertId).exec();
-    // 404 also covers "its patient isn't linked to this doctor", so an
-    // unrelated alert id reveals nothing.
+    // Any doctor may acknowledge; a deactivated patient's alert looks like none.
     if (!alert) throw new NotFoundException('Alert not found');
-    if (!(await this.users.isPatientLinkedToDoctor(String(alert.patientId), doctor.id))) {
+    if (!(await this.users.isActivePatient(String(alert.patientId)))) {
       throw new NotFoundException('Alert not found');
     }
     if (alert.status === ALERT_STATUS.ACKNOWLEDGED) {

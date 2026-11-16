@@ -92,7 +92,7 @@ login with a doctor-issued code is below (section 7).
 | v1.0 section | Code |
 |---|---|
 | Access rules (token, verified email, role) | `src/common/guards/` — registered in order in `app.module.ts` |
-| Doctor sees only linked patients (404 otherwise) | `src/users/users.service.ts` → `getPatientFor` |
+| Every doctor sees every patient (see "Who sees which patient" below) | `src/users/users.service.ts` → `getPatientFor` |
 | Onboarding (account + profile + email, with clean-up) | `src/registration/registration.service.ts` |
 | Invitations, 5 per user per hour | `src/registration/invitations.service.ts` |
 | Profile edits and (de)activation | `src/users/accounts.service.ts` |
@@ -142,6 +142,23 @@ time zone; negative once surgery has passed). `GET /patients` shows each patient
 `users.service.ts` placeholder can be pointed at this collection as-is, and its
 `scripts/seed.ts` users replaced by `npm run seed:dev-users` here.
 
+### 5a. Who sees which patient
+Team decision, November 2026: **every doctor sees every patient.** Any active doctor can open,
+edit and log against any patient, in all three APIs (deactivated patients are still a 404).
+
+The link between a doctor and a patient (`doctorIds`) stays, but now means "my patient":
+
+- It decides whose **inbox** gets the patient's vital alerts and care-team alerts
+  (`GET /doctor/alerts`, `GET /doctor/care-alerts` without `patientId`). With `?patientId=`
+  either list works for any patient, and any doctor may acknowledge.
+- `GET /patients` and the exercise caseload (`GET /doctor/exercise-compliance`) list every
+  patient; `?scope=mine` narrows them to the doctor's own.
+- A doctor adds a patient to their own with `PUT /patients/:patientId/doctors/me` and removes
+  them with `DELETE` on the same path. Removing is refused with `409 LAST_DOCTOR` when no other
+  doctor would be left. Both are audited (`DOCTOR_LINKS_CHANGED`) and safe to repeat.
+- Registering a patient still links the doctor who registers them; an admin can still set the
+  whole list with `PUT /patients/:patientId/doctors`.
+
 ### 6. Development logins
 `npm run seed:dev-users` creates five verified test logins (admin, two doctors, two patients)
 with the password in `FIREBASE_TEST_PASSWORD`. They use the same uids as Health Monitoring's test
@@ -154,9 +171,10 @@ patient's doctor, who passes it on (in person, by phone or by message).
 1. Patient app: phone number → `POST /auth/login-code/request`. Always `202` with the same
    message, so the route can't be used to find out who is a patient. Optional: the doctor can
    also make a code without being asked.
-2. Doctor app: `GET /doctor/login-code-requests` lists linked patients waiting (an admin sees
-   all). `POST /patients/:patientId/login-code` returns a 6-digit code, once, to pass on. A new
-   code replaces the old one.
+2. Doctor app: `GET /doctor/login-code-requests` lists every patient waiting, the doctor's own
+   (linked) patients first, flagged `myPatient`. Any doctor may make the code, so a patient isn't
+   stuck when their own doctor is away. `POST /patients/:patientId/login-code` returns a 6-digit
+   code, once, to pass on. A new code replaces the old one.
 3. Patient app: phone + code → `POST /auth/login-code/verify` → `{ customToken }`. Pass it to
    Firebase's `signInWithCustomToken`; from then on use normal ID tokens, as with email login.
    The patient stays signed in on that phone.
@@ -199,7 +217,7 @@ Blood group is not here: it is already on the medical profile.
   approved range also flags older results. An abnormal ECG is always flagged.
 - The `min`/`max` on each field only catch typing mistakes (Hb 110 instead of 11.0); they are
   not clinical limits.
-- Doctors only (linked patients), like the medical profile. Reads and changes are audited, and a
+- Doctors only (any patient), like the medical profile. Reads and changes are audited, and a
   read that can't be audited fails.
 
 Waiting on the client: the normal ranges (and whether they differ by age or sex), the eGFR formula

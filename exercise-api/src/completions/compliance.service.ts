@@ -69,14 +69,14 @@ export class ComplianceService {
   }
 
   /**
-   * GET /doctor/exercise-compliance: every linked patient's last `days` days,
-   * each ending on that patient's own today, plus today so far and when they
-   * last ticked or skipped. Each patient viewed is audited, as on the
-   * one-patient route.
+   * GET /doctor/exercise-compliance: every active patient's last `days` days
+   * (only linked ones with scope=mine), each ending on that patient's own
+   * today, plus today so far and when they last ticked or skipped. Each
+   * patient viewed is audited, as on the one-patient route.
    */
   async caseload(doctor: AuthUser, query: CaseloadQueryDto): Promise<CaseloadResponse> {
     const days = query.days ?? DEFAULT_COMPLIANCE_DAYS;
-    const patients = await this.users.patientsOf(doctor.id);
+    const patients = await this.users.patientsFor(doctor.id, query.scope ?? 'all');
 
     const data = await Promise.all(
       patients.map(async (patient) => {

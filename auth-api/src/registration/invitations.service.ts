@@ -61,15 +61,12 @@ export class InvitationsService {
 
   /**
    * POST /users/:userId/invitations. An admin may resend for anyone; a doctor
-   * only for their linked patients - anyone else is a 404 to them.
+   * for any patient (every doctor sees every patient) - other users are a 404.
    */
   async resend(caller: { id: string; role: Role }, userId: string): Promise<InvitationStatus> {
     const objectId = toObjectId(userId);
     const user = objectId ? await this.users.model.findById(objectId).exec() : null;
-    const visible =
-      !!user &&
-      (caller.role === ROLES.ADMIN ||
-        (user.role === ROLES.PATIENT && user.doctorIds.some((id) => String(id) === caller.id)));
+    const visible = !!user && (caller.role === ROLES.ADMIN || user.role === ROLES.PATIENT);
     if (!user || !visible) throw new NotFoundException('User not found');
     if (!user.active) throw new UserInactiveException();
 
