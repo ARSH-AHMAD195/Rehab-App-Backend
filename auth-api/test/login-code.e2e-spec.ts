@@ -42,7 +42,11 @@ describe('Login code (doctor-issued, no SMS)', () => {
     ]);
 
     const issued = await issue(doctor).expect(201);
-    expect(issued.body).toMatchObject({ patientId: patient.id, phone: PHONE, expiresInMinutes: 10, maxAttempts: 5 });
+    // 24 hours, or until it is used (client, Nov 2026).
+    expect(issued.body).toMatchObject({ patientId: patient.id, phone: PHONE, expiresInMinutes: 1440, maxAttempts: 5 });
+    const hoursLeft = (Date.parse(issued.body.expiresAt) - Date.now()) / 3_600_000;
+    expect(hoursLeft).toBeGreaterThan(23.9);
+    expect(hoursLeft).toBeLessThanOrEqual(24);
     expect(issued.body.code).toMatch(/^\d{6}$/);
     expect(issued.body.expiresAt).toMatch(/\+05:30$/);
 
@@ -245,9 +249,50 @@ describe('Login code (doctor-issued, no SMS)', () => {
     });
   });
 
+  describe('10-digit mobile numbers', () => {
+    it('a patient registered and signing in with just the 10 digits', async () => {
+      const res = await api()
+        .post('/api/v1/patients')
+        .set('Authorization', t.auth(doctor))
+        .send({ name: 'Sunita Rao', phone: '98111 11111' })
+        .expect(201);
+      // Stored with +91, so older numbers and WhatsApp links still work.
+      expect(res.body.phone).toBe('+919811111111');
+
+      await api().post('/api/v1/auth/login-code/request').send({ phone: '9811111111' }).expect(202);
+      const list = await api().get('/api/v1/doctor/login-code-requests').set('Authorization', t.auth(doctor)).expect(200);
+      expect(list.body.data.map((r: { patient: { id: string } }) => r.patient.id)).toEqual([res.body.id]);
+
+      const issued = await issue(doctor, res.body.id).expect(201);
+      await verify(issued.body.code, '9811111111').expect(200);
+    });
+
+    it('+91 in front still works, for numbers saved before', async () => {
+      const issued = await issue(doctor).expect(201);
+      await verify(issued.body.code, '9876543210').expect(200);
+      const again = await issue(doctor).expect(201);
+      await verify(again.body.code, '+91 98765-43210').expect(200);
+    });
+
+    it('the same number typed either way is the same patient', async () => {
+      const dup = await api().post('/api/v1/patients').set('Authorization', t.auth(doctor)).send({ name: 'Copy', phone: '9876543210' }).expect(409);
+      expect(dup.body.code).toBe('PHONE_ALREADY_EXISTS');
+    });
+
+    it.each(['987654321', '98765432100', '1234567890', '09876543210', '+449876543210', '+9198765432', '98765abcde'])(
+      'refuses %s',
+      async (phone) => {
+        const res = await api().post('/api/v1/patients').set('Authorization', t.auth(doctor)).send({ name: 'Wrong', phone }).expect(400);
+        expect(res.body.details).toEqual([
+          expect.objectContaining({ field: 'phone', issue: expect.stringContaining('10-digit mobile number') }),
+        ]);
+      },
+    );
+  });
+
   describe('validation and limits', () => {
     it.each([
-      ['request', { phone: '9876543210' }],
+      ['request', { phone: '987654321' }],
       ['verify', { phone: PHONE, code: '12345' }],
       ['verify', { phone: PHONE, code: '12a456' }],
       ['verify', { phone: PHONE }],

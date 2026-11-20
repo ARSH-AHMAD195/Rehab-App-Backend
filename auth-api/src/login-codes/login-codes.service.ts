@@ -64,7 +64,7 @@ export class LoginCodesService {
     private readonly tx: TransactionRunner,
     config: ConfigService,
   ) {
-    this.ttlMinutes = setting(config.get('LOGIN_CODE_TTL_MINUTES'), LOGIN_CODE.DEFAULT_TTL_MINUTES, 1, 60);
+    this.ttlMinutes = setting(config.get('LOGIN_CODE_TTL_MINUTES'), LOGIN_CODE.DEFAULT_TTL_MINUTES, 1, LOGIN_CODE.MAX_TTL_MINUTES);
     this.maxAttempts = setting(config.get('LOGIN_CODE_MAX_ATTEMPTS'), LOGIN_CODE.DEFAULT_MAX_ATTEMPTS, 1, 10);
   }
 

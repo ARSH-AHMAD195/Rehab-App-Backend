@@ -84,8 +84,26 @@ export const DEFAULT_PATIENT_TIME_ZONE = 'Asia/Kolkata';
 /** PUT /patients/:patientId/doctors: 1-10 doctors. */
 export const MAX_DOCTORS_PER_PATIENT = 10;
 
-/** E.164, e.g. +919876543210. */
-export const PHONE_PATTERN = /^\+[1-9]\d{7,14}$/;
+/**
+ * Indian mobile numbers (client, Nov 2026): people type the 10 digits only, no
+ * country code. Stored as +91 and the 10 digits, so numbers saved earlier
+ * still match and links like WhatsApp's keep working. See toMobile.
+ */
+export const PHONE_PATTERN = /^\+91[6-9]\d{9}$/;
+export const PHONE_ISSUE = 'must be a 10-digit mobile number, e.g. 9876543210';
+
+/**
+ * What the client sends, as stored: "9876543210" (the normal way) or
+ * "+919876543210" (apps that already add the code) both become
+ * "+919876543210". Spaces and dashes are ignored. Anything else is left as
+ * sent, for PHONE_PATTERN to refuse.
+ */
+export const toMobile = ({ value }: { value: unknown }): unknown => {
+  if (typeof value !== 'string') return value;
+  const compact = value.replace(/[\s-]/g, '');
+  if (/^[6-9]\d{9}$/.test(compact)) return `+91${compact}`;
+  return compact;
+};
 
 /** Rate limits, v1.0. Starting values, to be tuned after testing. */
 export const RATE_LIMITS = {
@@ -104,12 +122,14 @@ export const INVITATIONS_PER_HOUR = 5;
  * Doctor-issued login codes (client change request, Nov 2026): the code goes
  * to the patient's doctor, who passes it on - no SMS.
  *
- * The lifetime and the number of tries are defaults until the client confirms
- * them; override with LOGIN_CODE_TTL_MINUTES and LOGIN_CODE_MAX_ATTEMPTS.
+ * A code works for 24 hours or until the patient signs in with it, whichever
+ * comes first (client, Nov 2026). Override with LOGIN_CODE_TTL_MINUTES (1 to
+ * MAX_TTL_MINUTES) and LOGIN_CODE_MAX_ATTEMPTS.
  */
 export const LOGIN_CODE = {
   DIGITS: 6,
-  DEFAULT_TTL_MINUTES: 10,
+  DEFAULT_TTL_MINUTES: 24 * 60,
+  MAX_TTL_MINUTES: 24 * 60,
   DEFAULT_MAX_ATTEMPTS: 5,
   /** A patient's "send me a code" request shows in the doctor's list this long. */
   REQUEST_VISIBLE_HOURS: 24,

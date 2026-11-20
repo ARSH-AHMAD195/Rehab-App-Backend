@@ -1,14 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsString, Matches } from 'class-validator';
-import { LOGIN_CODE, PHONE_PATTERN } from '../common/constants';
+import { LOGIN_CODE, PHONE_ISSUE, PHONE_PATTERN, toMobile } from '../common/constants';
 
-const PHONE_ISSUE = 'must be in E.164 format, e.g. +919876543210';
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
 export class RequestLoginCodeDto {
-  @ApiProperty({ example: '+919876543210' })
-  @Transform(trim)
+  @ApiProperty({ example: '9876543210', description: 'The 10-digit mobile number. +91 in front is accepted too.' })
+  @Transform(toMobile)
   @IsString()
   @Matches(PHONE_PATTERN, { message: PHONE_ISSUE })
   phone!: string;

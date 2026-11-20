@@ -26,7 +26,9 @@ import {
   Language,
   MAX_DOCTORS_PER_PATIENT,
   MAX_PAGE_LIMIT,
+  PHONE_ISSUE,
   PHONE_PATTERN,
+  toMobile,
 } from '../common/constants';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
@@ -35,7 +37,6 @@ const lower = ({ value }: { value: unknown }) => (typeof value === 'string' ? va
 /** Present-but-null must fail, so these use ValidateIf, not IsOptional (which lets null through). */
 const ifSent = ValidateIf((_o: unknown, value: unknown) => value !== undefined);
 
-const PHONE_ISSUE = 'must be in E.164 format, e.g. +919876543210';
 
 // ---------------------------------------------------------------- registration
 
@@ -49,11 +50,12 @@ class RegisterBaseDto {
   name!: string;
 
   @ApiPropertyOptional({
-    example: '+919876543210',
+    example: '9876543210',
     nullable: true,
-    description: 'E.164. For a patient it is also their login (with a code from their doctor), so it must be unused by other patients.',
+    description: 'The 10-digit mobile number (+91 in front is accepted too); stored and returned as +91XXXXXXXXXX. For a patient it is also their login (with a code from their doctor), so it must be unused by other patients.',
   })
   @IsOptional()
+  @Transform(toMobile)
   @Matches(PHONE_PATTERN, { message: PHONE_ISSUE })
   phone?: string | null;
 }
@@ -122,6 +124,7 @@ export class UpdateMyProfileDto {
 
   @ApiPropertyOptional({ nullable: true })
   @IsOptional()
+  @Transform(toMobile)
   @Matches(PHONE_PATTERN, { message: PHONE_ISSUE })
   phone?: string | null;
 
@@ -154,6 +157,7 @@ export class UpdatePatientDto {
 
   @ApiPropertyOptional({ nullable: true })
   @IsOptional()
+  @Transform(toMobile)
   @Matches(PHONE_PATTERN, { message: PHONE_ISSUE })
   phone?: string | null;
 
@@ -179,6 +183,7 @@ export class UpdateDoctorDto {
 
   @ApiPropertyOptional({ nullable: true })
   @IsOptional()
+  @Transform(toMobile)
   @Matches(PHONE_PATTERN, { message: PHONE_ISSUE })
   phone?: string | null;
 
