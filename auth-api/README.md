@@ -179,8 +179,12 @@ patient's doctor, who passes it on (in person, by phone or by message).
    Firebase's `signInWithCustomToken`; from then on use normal ID tokens, as with email login.
    The patient stays signed in on that phone.
 
-Rules: a code works once, for 10 minutes, for 5 tries (`LOGIN_CODE_TTL_MINUTES`,
-`LOGIN_CODE_MAX_ATTEMPTS` - defaults until the client confirms). Only its hash is stored, and it is
+Phone numbers are 10-digit Indian mobile numbers, typed without a country code (`9876543210`;
+`+91` in front is accepted too, and spaces or dashes are ignored). They are stored and returned as
+`+919876543210`, so numbers saved earlier still match.
+
+Rules: a code works once, for 24 hours (or until the patient signs in with it), for 5 tries
+(`LOGIN_CODE_TTL_MINUTES`, at most 1440, and `LOGIN_CODE_MAX_ATTEMPTS`). Only its hash is stored, and it is
 never logged; request, issue and use are audited. Every failure is the same
 `401 INVALID_LOGIN_CODE`. Both sign-in routes allow 10 calls per minute per IP address.
 

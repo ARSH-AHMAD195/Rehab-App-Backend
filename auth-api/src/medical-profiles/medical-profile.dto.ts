@@ -21,7 +21,9 @@ import {
   BLOOD_GROUPS,
   CONDITIONS,
   IHD_STATUSES,
+  PHONE_ISSUE,
   PHONE_PATTERN,
+  toMobile,
   SEXES,
   SMOKING_STATUSES,
   WEIGHT_KG_RANGE,
@@ -49,8 +51,9 @@ export class EmergencyContactDto {
   @MaxLength(50)
   relation!: string;
 
-  @ApiProperty({ example: '+919812345678' })
-  @Matches(PHONE_PATTERN, { message: 'must be in E.164 format, e.g. +919876543210' })
+  @ApiProperty({ example: '9812345678', description: 'The 10-digit mobile number. +91 in front is accepted too.' })
+  @Transform(toMobile)
+  @Matches(PHONE_PATTERN, { message: PHONE_ISSUE })
   phone!: string;
 }
 
