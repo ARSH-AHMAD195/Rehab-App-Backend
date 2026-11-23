@@ -1,3 +1,5 @@
+import { LoginMethod } from '../common/constants';
+
 /** What the auth guard needs out of a verified bearer token. */
 export interface VerifiedToken {
   uid: string;
@@ -9,14 +11,26 @@ export interface VerifiedToken {
    * after a correct login code. Only this API can make custom tokens.
    */
   signInProvider: string | null;
+  /**
+   * For a custom-token sign-in: what this API checked before making the token,
+   * LOGIN_CODE or PASSWORD (a patient's phone and password). Carried in the
+   * token as the LOGIN_CLAIM claim. Null otherwise, and on tokens made before
+   * the claim existed (those were all login codes).
+   */
+  loginClaim: string | null;
 }
 
 /** Firebase's sign_in_provider for a sign-in with a custom token. */
 export const CUSTOM_SIGN_IN = 'custom';
 
+/** The custom-token claim saying how the patient proved who they are. */
+export const LOGIN_CLAIM = 'ffs_login';
+
 /**
  * Everything this module asks of the identity provider (Firebase
- * Authentication). Passwords live only there; this module never sees one.
+ * Authentication). Staff passwords live only there. Patients, who often have
+ * no email, keep a phone-and-password sign-in in this module instead
+ * (patient-password/), which then signs them in with a custom token.
  */
 export interface IdentityProvider {
   /**
@@ -43,11 +57,11 @@ export interface IdentityProvider {
   sendSetPasswordEmail(email: string): Promise<void>;
 
   /**
-   * A one-time sign-in token for this account, after a correct login code. The
-   * app passes it to Firebase's signInWithCustomToken and from then on uses
-   * normal ID tokens.
+   * A one-time sign-in token for this account, after a correct login code or
+   * patient password (`method`, kept in the token). The app passes it to
+   * Firebase's signInWithCustomToken and from then on uses normal ID tokens.
    */
-  createCustomToken(uid: string): Promise<string>;
+  createCustomToken(uid: string, method: LoginMethod): Promise<string>;
 }
 
 /**

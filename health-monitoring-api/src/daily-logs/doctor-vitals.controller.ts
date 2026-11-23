@@ -1,22 +1,28 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Put, Query, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
+  ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiConflictResponse,
+  ApiHeader,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
   ApiTags,
+  ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
-import { ROLES } from '../common/constants';
+import { RATE_LIMITS, ROLES } from '../common/constants';
 import { NotFoundException } from '../common/api.exception';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { PatientAccessGuard } from '../common/guards/patient-access.guard';
 import { AuthUser, UsersService } from '../users/users.service';
 import { DailyLogsService, LogTarget } from './daily-logs.service';
-import { DailyLogResponse, LogListResponse } from './log.response';
+import { IdempotencyService } from './idempotency.service';
+import { DailyLogResponse, LogListResponse, SaveLogResponse } from './log.response';
 import { TrendResponse } from './trend.response';
-import { LogsQueryDto, TrendsQueryDto } from './dto';
+import { LogsQueryDto, SaveTodayDto, TrendsQueryDto } from './dto';
 
 /**
  * Doctor endpoints, v1.1: the three /doctor/patients/:patientId/vitals routes
@@ -41,6 +47,7 @@ export class DoctorVitalsController {
   constructor(
     private readonly logs: DailyLogsService,
     private readonly users: UsersService,
+    private readonly idempotency: IdempotencyService,
   ) {}
 
   @Get('today')
@@ -52,6 +59,34 @@ export class DoctorVitalsController {
   ): Promise<DailyLogResponse> {
     const target = await this.audited(doctor, patientId);
     return this.logs.getToday(target);
+  }
+
+  @Put('today')
+  @Throttle({
+    [RATE_LIMITS.USER.name]: { limit: RATE_LIMITS.WRITE.limit, ttl: RATE_LIMITS.WRITE.ttl },
+  })
+  @ApiOperation({
+    summary: "Enter some or all of a patient's readings for today (issue #25)",
+    description:
+      'Same body, checks, Idempotency-Key and answer as PUT /me/vitals/today. `date` is the ' +
+      "patient's today, in their time zone. The readings count exactly like the patient's own " +
+      '(vital alerts, triage); the audit log and each reading record which doctor entered them.',
+  })
+  @ApiHeader({ name: 'Idempotency-Key', required: false, description: 'As on PUT /me/vitals/today.' })
+  @ApiOkResponse({ type: SaveLogResponse })
+  @ApiBadRequestResponse({ description: 'VALIDATION_FAILED' })
+  @ApiConflictResponse({ description: "DAY_CHANGED - not the patient's today; IDEMPOTENCY_KEY_IN_USE" })
+  @ApiUnprocessableEntityResponse({ description: 'IDEMPOTENCY_KEY_REUSED' })
+  async save(
+    @CurrentUser() doctor: AuthUser,
+    @Param('patientId') patientId: string,
+    @Body() body: SaveTodayDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ): Promise<SaveLogResponse> {
+    const patient = await this.users.getPatient(patientId);
+    if (!patient) throw new NotFoundException('Patient not found');
+    const target = { id: patient.id, timeZone: patient.timeZone };
+    return this.idempotency.run(patient.id, idempotencyKey, body, () => this.logs.save(target, body, doctor));
   }
 
   @Get('logs')

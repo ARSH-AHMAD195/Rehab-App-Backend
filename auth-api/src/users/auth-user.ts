@@ -11,6 +11,11 @@ export interface AuthUser {
   emailVerified: boolean;
   /** LOGIN_CODE when this token came from a doctor-issued login code. */
   loginMethod: LoginMethod;
+  /**
+   * Signed in with a token this API made (after a login code or a patient
+   * password), not with Firebase's own email and password.
+   */
+  viaCustomToken: boolean;
   timeZone: string | null;
   doctorIds: string[];
 }

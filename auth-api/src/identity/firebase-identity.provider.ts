@@ -4,7 +4,8 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import * as admin from 'firebase-admin';
 import { EmailAlreadyExistsException, UnauthenticatedException } from '../common/api.exception';
-import { IdentityProvider, VerifiedToken } from './identity-provider';
+import { LoginMethod } from '../common/constants';
+import { IdentityProvider, LOGIN_CLAIM, VerifiedToken } from './identity-provider';
 
 /**
  * Firebase Authentication, through the Admin SDK (accounts, tokens) and the
@@ -31,6 +32,7 @@ export class FirebaseIdentityProvider implements IdentityProvider {
         email: decoded.email ?? null,
         emailVerified: decoded.email_verified === true,
         signInProvider: decoded.firebase?.sign_in_provider ?? null,
+        loginClaim: typeof decoded[LOGIN_CLAIM] === 'string' ? (decoded[LOGIN_CLAIM] as string) : null,
       };
     } catch (error) {
       this.logger.debug(`Token rejected: ${(error as Error).message}`);
@@ -90,9 +92,10 @@ export class FirebaseIdentityProvider implements IdentityProvider {
     }
   }
 
-  async createCustomToken(uid: string): Promise<string> {
+  async createCustomToken(uid: string, method: LoginMethod): Promise<string> {
     // Signed with the service account's key, so only this API can make one.
-    return this.auth().createCustomToken(uid);
+    // The claim lands in every ID token of this sign-in.
+    return this.auth().createCustomToken(uid, { [LOGIN_CLAIM]: method });
   }
 
   /** Fails the boot, not the first request, when Firebase is misconfigured. */

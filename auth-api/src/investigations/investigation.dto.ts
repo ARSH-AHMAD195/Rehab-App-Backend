@@ -49,12 +49,15 @@ export class RetractInvestigationDto {
   reason!: string;
 }
 
-export class InvestigationGridQueryDto {
+/** GET /patients/me/investigations */
+export class MyInvestigationsQueryDto {
   @ApiPropertyOptional({ enum: TEST_CODES, description: 'Only this test' })
   @IsOptional()
   @IsIn(TEST_CODES)
   test?: string;
+}
 
+export class InvestigationGridQueryDto extends MyInvestigationsQueryDto {
   @ApiPropertyOptional({ enum: ['true', 'false'], default: 'false', description: 'Also show retracted results' })
   @IsOptional()
   @IsIn(['true', 'false'])

@@ -15,6 +15,10 @@ export const ERROR_CODES = {
   PHONE_ALREADY_EXISTS: 'PHONE_ALREADY_EXISTS',
   /** Login code wrong, expired, used up, or no such patient - deliberately one answer for all. */
   INVALID_LOGIN_CODE: 'INVALID_LOGIN_CODE',
+  /** Patient password sign-in: wrong number, wrong password, no password yet, or locked - one answer for all. */
+  INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
+  /** Setting a patient password needs a session that started from a doctor's login code. */
+  LOGIN_CODE_SESSION_REQUIRED: 'LOGIN_CODE_SESSION_REQUIRED',
   /** Same code and meaning as Health Monitoring's alert inbox. */
   ALERT_ALREADY_ACKNOWLEDGED: 'ALERT_ALREADY_ACKNOWLEDGED',
   DOCTOR_HAS_PATIENTS: 'DOCTOR_HAS_PATIENTS',
@@ -54,6 +58,10 @@ export const AUDIT_ACTIONS = {
   LOGIN_CODE_REQUESTED: 'LOGIN_CODE_REQUESTED',
   LOGIN_CODE_ISSUED: 'LOGIN_CODE_ISSUED',
   LOGIN_CODE_USED: 'LOGIN_CODE_USED',
+  /** Patient passwords (issue #20). The password and its hash are never recorded. */
+  PATIENT_PASSWORD_SET: 'PATIENT_PASSWORD_SET',
+  PATIENT_PASSWORD_SIGN_IN: 'PATIENT_PASSWORD_SIGN_IN',
+  PATIENT_PASSWORD_LOCKED: 'PATIENT_PASSWORD_LOCKED',
   /** Investigations (PAC grid). Reads are audited, like the medical profile. */
   INVESTIGATION_ADDED: 'INVESTIGATION_ADDED',
   INVESTIGATION_RETRACTED: 'INVESTIGATION_RETRACTED',
@@ -139,9 +147,27 @@ export const LOGIN_CODE = {
   PUBLIC_RATE: { limit: 10, ttl: 60_000 },
 } as const;
 
-/** How a caller signed in, from the token: the app hides "verify your email" for LOGIN_CODE. */
+/**
+ * How a caller signed in, from the token: the app hides "verify your email"
+ * for LOGIN_CODE. PASSWORD covers staff (email and password, in Firebase) and
+ * patients (phone and password, issue #20).
+ */
 export const LOGIN_METHODS = { PASSWORD: 'PASSWORD', LOGIN_CODE: 'LOGIN_CODE' } as const;
 export type LoginMethod = (typeof LOGIN_METHODS)[keyof typeof LOGIN_METHODS];
+
+/**
+ * Patient passwords (client, Nov 2026; issue #20). The first sign-in is with a
+ * doctor's code, then the patient sets a password; a forgotten password is
+ * reset the same way. Kept simple for older patients: 6 characters at least,
+ * nothing else required. After MAX_FAILURES wrong tries in a row, password
+ * sign-in is locked for LOCK_MINUTES (a doctor's code still works).
+ */
+export const PATIENT_PASSWORD = {
+  MIN_LENGTH: 6,
+  MAX_LENGTH: 128,
+  MAX_FAILURES: 5,
+  LOCK_MINUTES: 15,
+} as const;
 
 /**
  * Care-team alerts (client change request, section 3.3). The percentages and

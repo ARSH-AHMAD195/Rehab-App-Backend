@@ -61,6 +61,7 @@ way.
 | GET | `/me/vitals/logs` | patient | ″ |
 | GET | `/me/vitals/trends` | patient | ″ |
 | GET | `/doctor/patients/:patientId/vitals/today` | doctor | `src/daily-logs/doctor-vitals.controller.ts` |
+| PUT | `/doctor/patients/:patientId/vitals/today` | doctor | ″ (issue #25: same body, checks and answer as `PUT /me/vitals/today`; counts like the patient's own readings for alerts and triage; each reading's `enteredBy` and the audit say which doctor) |
 | GET | `/doctor/patients/:patientId/vitals/logs` | doctor | ″ |
 | GET | `/doctor/patients/:patientId/vitals/trends` | doctor | ″ |
 | GET | `/doctor/alerts` | doctor | `src/alerts/doctor-alerts.controller.ts` |
@@ -180,7 +181,7 @@ per-IP limit must not wait for one:
 | Guard | Runs | Counts |
 |---|---|---|
 | `IpThrottlerGuard` | **before** the auth guard | 300/min per IP address |
-| `UserThrottlerGuard` | after the auth guard | 120/min per user, 30/min on `PUT /me/vitals/today` |
+| `UserThrottlerGuard` | after the auth guard | 120/min per user, 30/min on `PUT /me/vitals/today` and the doctor's `PUT .../vitals/today` |
 
 So a flood of invalid tokens is rejected on the address alone and never reaches Firebase or the
 `users` collection. Each guard ignores the other's named limit, so a request increments each
@@ -228,7 +229,8 @@ the patient's `preferredLanguage` (Auth API).
 ## Nutrition (diet chart and meal logging)
 Client change request, Nov 2026, section 5. Code in `src/nutrition/`.
 
-- **The chart:** the hospital's "High-calorie, High-protein Diet for Cancer Patients"
+- **The chart:** from the hospital's "High-calorie, High-protein Diet for Cancer Patients", shown
+  to patients as "High-calorie, high-protein diet" (not every patient has cancer; issue #22)
   (`diet-chart.ts`): 7 meal slots with times, "or" options and "+" add-ons with their quantities,
   and calories and protein **per slot**, as on the chart. Default target: 2206 kcal and 82.4 g
   protein. Labels are `{ en, hi }`; `hi` stays null until the client supplies translations.

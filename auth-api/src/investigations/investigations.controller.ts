@@ -7,15 +7,16 @@ import { AuthUser } from '../users/auth-user';
 import {
   AddInvestigationDto,
   InvestigationGridQueryDto,
+  MyInvestigationsQueryDto,
   RetractInvestigationDto,
   SetInvestigationRangeDto,
 } from './investigation.dto';
 import { GridRow, InvestigationResponse, InvestigationsService, TestResponse } from './investigations.service';
 
-/** The test list, for building the entry form and the grid. */
+/** The test list, for building the entry form and the grid. Patients read it too, for the units. */
 @ApiTags('Investigations')
 @ApiBearerAuth()
-@Roles(ROLES.DOCTOR, ROLES.ADMIN)
+@Roles(ROLES.DOCTOR, ROLES.ADMIN, ROLES.PATIENT)
 @Controller('investigation-tests')
 export class InvestigationTestsController {
   constructor(private readonly investigations: InvestigationsService) {}
@@ -23,14 +24,34 @@ export class InvestigationTestsController {
   @Get()
   @ApiOperation({
     summary: 'The investigation tests and their fields',
-    description: 'Follows the PAC grid. Each number field shows its approved normal range, or null until the clinic sets one.',
+    description:
+      'Follows the PAC grid: labels, units and each number field\'s approved normal range (null until the clinic sets one). Any signed-in user.',
   })
   tests(): Promise<{ data: TestResponse[] }> {
     return this.investigations.tests();
   }
 }
 
-/** A linked patient's results. Doctors only, like the medical profile. */
+/** The signed-in patient's own results, read only (issue #19). */
+@ApiTags('Investigations')
+@ApiBearerAuth()
+@Roles(ROLES.PATIENT)
+@Controller('patients/me/investigations')
+export class MyInvestigationsController {
+  constructor(private readonly investigations: InvestigationsService) {}
+
+  @Get()
+  @ApiOperation({
+    summary: 'My test results (patient)',
+    description:
+      'Same shape as the doctor\'s grid: every test with its results, newest first. Results entered in error are left out. Units are in GET /investigation-tests.',
+  })
+  mine(@CurrentUser() patient: AuthUser, @Query() query: MyInvestigationsQueryDto): Promise<{ patientId: string; tests: GridRow[] }> {
+    return this.investigations.mine(patient, query.test);
+  }
+}
+
+/** A patient's results, for doctors, like the medical profile. */
 @ApiTags('Investigations')
 @ApiBearerAuth()
 @Roles(ROLES.DOCTOR)

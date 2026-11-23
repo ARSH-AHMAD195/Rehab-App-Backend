@@ -235,6 +235,19 @@ export class UpdateMedicalProfileDto {
   @IsOptional()
   @IsBoolean()
   canClimbTwoFlights?: boolean | null;
+
+  // ------------------------------------------------ doctors only
+
+  @ApiPropertyOptional({
+    example: 'Discussed stopping aspirin 5 days before surgery; review at next visit.',
+    nullable: true,
+    description: "Doctors only: never shown to the patient, and a patient sending it gets 403. Up to 2000 characters.",
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(2000)
+  clinicalNotes?: string | null;
 }
 
 // Compile-time only: the DTO's fields (besides version) are exactly the schema's MEDICAL_FIELDS.

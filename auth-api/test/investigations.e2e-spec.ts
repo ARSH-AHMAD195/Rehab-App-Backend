@@ -207,6 +207,47 @@ describe('Investigations (PAC grid)', () => {
     });
   });
 
+  describe("the patient's own results (issue #19)", () => {
+    const mine = (query = '', as: TestUser = patient) =>
+      api().get(`/api/v1/patients/me/investigations${query}`).set('Authorization', t.auth(as));
+
+    it('shows the patient their results, newest first, with the comment and without retracted ones', async () => {
+      await add({ test: 'HB', takenOn: daysAgo(10), values: { value: 9.1 } }).expect(201);
+      await add({ test: 'HB', takenOn: daysAgo(2), values: { value: 10.4 }, comment: 'Improving' }).expect(201);
+      const wrong = await add({ test: 'ALBUMIN', takenOn: daysAgo(1), values: { value: 2.1 } }).expect(201);
+      await api().post(`${base()}/${wrong.body.id}/retract`).set('Authorization', t.auth(doctor)).send({ reason: 'Wrong patient' }).expect(200);
+
+      const res = await mine().expect(200);
+      expect(res.body.patientId).toBe(patient.id);
+      expect(row(res.body, 'HB').results).toEqual([
+        expect.objectContaining({ takenOn: daysAgo(2), values: { value: 10.4 }, comment: 'Improving' }),
+        expect.objectContaining({ takenOn: daysAgo(10), values: { value: 9.1 } }),
+      ]);
+      expect(row(res.body, 'ALBUMIN').results).toEqual([]);
+      // ?includeRetracted is a doctor's option only.
+      await mine('?includeRetracted=true').expect(400);
+    });
+
+    it('only ever their own results, and one test with ?test=', async () => {
+      const otherPatient = await t.seed({ role: 'PATIENT', name: 'Other', doctorIds: [doctor.id] });
+      await api()
+        .post(`/api/v1/patients/${otherPatient.id}/investigations`)
+        .set('Authorization', t.auth(doctor))
+        .send({ test: 'HB', takenOn: daysAgo(1), values: { value: 7 } })
+        .expect(201);
+
+      const res = await mine('?test=HB').expect(200);
+      expect(res.body.tests).toEqual([expect.objectContaining({ test: 'HB', results: [] })]);
+    });
+
+    it('doctors and admins use the patient grid instead; patients can read the test list for units', async () => {
+      await mine('', doctor).expect(403);
+      await mine('', admin).expect(403);
+      const tests = await api().get('/api/v1/investigation-tests').set('Authorization', t.auth(patient)).expect(200);
+      expect(tests.body.data.find((d: { code: string }) => d.code === 'HB').fields[0]).toMatchObject({ unit: 'g/dL' });
+    });
+  });
+
   describe('validation', () => {
     it.each([
       ['an unknown test', { test: 'XRAY', takenOn: '2026-01-01', values: { value: 1 } }],

@@ -22,6 +22,7 @@ describe('Identity and own profile', () => {
         email: doctor.email,
         emailVerified: true,
         loginMethod: 'PASSWORD',
+        hasPassword: null,
         active: true,
       });
     });

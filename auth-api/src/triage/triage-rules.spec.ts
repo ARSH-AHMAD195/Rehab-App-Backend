@@ -147,13 +147,32 @@ describe('triage rules (client table, Nov 2026)', () => {
     expect(evaluateTriage({ ...healthy(), hb: v(8.5) }, rules).tag).toBe('MEDIUM');
   });
 
-  it('explains each reason with the value and its date', () => {
+  it('explains each reason with the value; the date comes separately, for the app to format', () => {
     const result = evaluateTriage({ ...healthy(), hb: { value: 7.6, date: '2026-11-08' } }, rules);
     expect(result.reasons[0]).toEqual({
       parameter: 'HAEMOGLOBIN',
       level: 'HIGH',
-      explanation: 'Hb 7.6 g/dL on 2026-11-08 (High: below 8)',
+      explanation: 'Hb 7.6 g/dL (High: below 8)',
       date: '2026-11-08',
     });
+  });
+
+  it('never puts a raw date in the text, including for quitting smoking, an MI or stent, and chemotherapy', () => {
+    const result = evaluateTriage(
+      {
+        ...healthy(),
+        hb: { value: 7.6, date: '2026-11-08' },
+        smokingStatus: 'FORMER',
+        smokingQuitDate: '2026-11-01',
+        lastMiOrStentDate: '2026-10-01',
+        lastChemoDate: '2026-11-03',
+      },
+      rules,
+    );
+    const byParameter = Object.fromEntries(result.reasons.map((r) => [r.parameter, r]));
+    expect(byParameter.SMOKING).toMatchObject({ explanation: 'Quit smoking under 56 days ago (Medium)', date: '2026-11-01' });
+    expect(byParameter.IHD).toMatchObject({ date: '2026-10-01' });
+    expect(byParameter.RECENT_CHEMOTHERAPY).toMatchObject({ date: '2026-11-03' });
+    for (const reason of result.reasons) expect(reason.explanation).not.toMatch(/\d{4}-\d{2}-\d{2}/);
   });
 });

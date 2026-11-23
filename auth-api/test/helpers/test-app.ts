@@ -23,6 +23,8 @@ export interface FakeAccount {
   disabled: boolean;
   /** "custom" once signed in with a custom token (see signInWithCustomToken). */
   signInProvider?: string;
+  /** The custom token's login claim: LOGIN_CODE or PASSWORD. */
+  loginClaim?: string | null;
 }
 
 export class FakeIdentityProvider implements IdentityProvider {
@@ -41,6 +43,7 @@ export class FakeIdentityProvider implements IdentityProvider {
       email: account.email,
       emailVerified: account.emailVerified,
       signInProvider: account.signInProvider ?? (account.email ? 'password' : null),
+      loginClaim: account.loginClaim ?? null,
     };
   }
 
@@ -53,9 +56,13 @@ export class FakeIdentityProvider implements IdentityProvider {
     return { uid };
   }
 
-  async createCustomToken(uid: string): Promise<string> {
-    const token = `custom-token:${uid}`;
+  /** Which login claim each token was made with. */
+  private tokenClaims = new Map<string, string>();
+
+  async createCustomToken(uid: string, method: string): Promise<string> {
+    const token = `custom-token:${method}:${uid}`;
     this.customTokens.push(token);
+    this.tokenClaims.set(token, method);
     return token;
   }
 
@@ -66,8 +73,10 @@ export class FakeIdentityProvider implements IdentityProvider {
    */
   signInWithCustomToken(token: string): string {
     if (!this.customTokens.includes(token)) throw new Error(`Not a token this API made: ${token}`);
-    const uid = token.slice('custom-token:'.length);
-    this.accounts.get(uid)!.signInProvider = 'custom';
+    const uid = token.split(':').slice(2).join(':');
+    const account = this.accounts.get(uid)!;
+    account.signInProvider = 'custom';
+    account.loginClaim = this.tokenClaims.get(token) ?? null;
     return uid;
   }
 
@@ -95,6 +104,7 @@ export class FakeIdentityProvider implements IdentityProvider {
     this.sentEmails = [];
     this.deleted = [];
     this.customTokens = [];
+    this.tokenClaims.clear();
     this.failEmails = false;
     this.next = 1;
   }

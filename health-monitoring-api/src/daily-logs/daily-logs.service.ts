@@ -79,8 +79,14 @@ export class DailyLogsService {
    * alerts, audit entries and outbox events.
    */
   async save(
-    patient: AuthUser,
+    patient: LogTarget,
     body: { date: string; readings: Record<string, unknown> },
+    /**
+     * Who is saving: the patient, or a doctor entering readings for them
+     * (issue #25). Either way the same checks, alerts, audit and events run;
+     * the audit and each reading record who entered it.
+     */
+    actor: AuthUser,
   ): Promise<SaveLogResponse> {
     const validated = await this.validator.validate(body.readings);
 
@@ -120,7 +126,7 @@ export class DailyLogsService {
         .findOneAndUpdate(
           { patientId, date: today },
           {
-            $set: this.toReadingUpdates(changed, now),
+            $set: this.toReadingUpdates(changed, now, actor),
             $setOnInsert: { patientId, date: today, timeZone: patient.timeZone },
           },
           { new: true, upsert: true, session },
@@ -142,7 +148,7 @@ export class DailyLogsService {
 
       await this.audit.record(
         {
-          actor: patient,
+          actor,
           action: AUDIT_ACTIONS.VITALS_VALUE_CHANGED,
           patientId,
           resourceId: String(updated._id),
@@ -344,6 +350,7 @@ export class DailyLogsService {
   private toReadingUpdates(
     changed: ValidatedReading[],
     now: Date,
+    actor: AuthUser,
   ): Record<string, StoredReading> {
     const updates: Record<string, StoredReading> = {};
 
@@ -354,6 +361,7 @@ export class DailyLogsService {
         typeVersion: def.version,
         status: value === null ? READING_STATUS.NOT_YET : READING_STATUS.LOGGED,
         loggedAt: value === null ? null : now,
+        enteredBy: value === null ? null : { id: new Types.ObjectId(actor.id), role: actor.role },
       };
     }
     return updates;

@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import { FilterQuery, Model, Types } from 'mongoose';
-import { AUDIT_ACTIONS, DETAIL_CODES, LOGIN_CODE, ROLES, Role } from '../common/constants';
+import { AUDIT_ACTIONS, DETAIL_CODES, LOGIN_CODE, LOGIN_METHODS, ROLES, Role } from '../common/constants';
 import {
   InvalidLoginCodeException,
   UserInactiveException,
@@ -226,7 +226,7 @@ export class LoginCodesService {
       resourceId: String(patient._id),
     });
 
-    return { customToken: await this.identity.createCustomToken(patient.firebaseUid) };
+    return { customToken: await this.identity.createCustomToken(patient.firebaseUid, LOGIN_METHODS.LOGIN_CODE) };
   }
 }
 

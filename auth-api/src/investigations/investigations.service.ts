@@ -136,9 +136,23 @@ export class InvestigationsService {
       resourceId: String(patient._id),
     });
 
+    return this.buildGrid(patient, query.test, query.includeRetracted === 'true');
+  }
+
+  /**
+   * GET /patients/me/investigations (issue #19): the signed-in patient's own
+   * results, read only, in the same shape as the doctor's grid. Results
+   * entered in error are left out. Flags are sent as they are; whether the
+   * patient sees them in red is the app's choice, until the client decides.
+   */
+  async mine(patient: Actor, test?: string): Promise<{ patientId: string; tests: GridRow[] }> {
+    return this.buildGrid(await this.users.getPatientFor(patient, patient.id), test, false);
+  }
+
+  private async buildGrid(patient: UserDocument, test: string | undefined, includeRetracted: boolean): Promise<{ patientId: string; tests: GridRow[] }> {
     const filter: FilterQuery<Investigation> = { patientId: patient._id };
-    if (query.test) filter.test = query.test;
-    if (query.includeRetracted !== 'true') filter.status = RESULT_STATUS.ACTIVE;
+    if (test) filter.test = test;
+    if (!includeRetracted) filter.status = RESULT_STATUS.ACTIVE;
 
     const [rows, ranges] = await Promise.all([
       this.results.find(filter).sort({ takenOn: -1, createdAt: -1 }).limit(2000).exec(),
@@ -153,7 +167,7 @@ export class InvestigationsService {
 
     return {
       patientId: String(patient._id),
-      tests: INVESTIGATION_TESTS.filter((def) => !query.test || def.code === query.test).map((def) => ({
+      tests: INVESTIGATION_TESTS.filter((def) => !test || def.code === test).map((def) => ({
         test: def.code,
         label: def.label,
         group: def.group,

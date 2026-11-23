@@ -20,6 +20,7 @@ import { DoctorsModule } from './doctors/doctors.module';
 import { MedicalProfilesModule } from './medical-profiles/medical-profiles.module';
 import { PatientsModule } from './patients/patients.module';
 import { LoginCodesModule } from './login-codes/login-codes.module';
+import { PatientPasswordModule } from './patient-password/patient-password.module';
 import { InvestigationsModule } from './investigations/investigations.module';
 import { TriageModule } from './triage/triage.module';
 import { CareAlertsModule } from './care-alerts/care-alerts.module';
@@ -52,6 +53,7 @@ import { CareAlertsModule } from './care-alerts/care-alerts.module';
     MedicalProfilesModule,
     PatientsModule,
     LoginCodesModule,
+    PatientPasswordModule,
     InvestigationsModule,
     TriageModule,
     CareAlertsModule,
@@ -61,9 +63,10 @@ import { CareAlertsModule } from './care-alerts/care-alerts.module';
     // Global guards run in the order registered here:
     //  1. the per-IP limit, before any token work, so a flood of bad tokens
     //     never reaches Firebase;
-    //  2. authentication (skipped on the two @Public() login-code routes);
+    //  2. authentication (skipped on the @Public() login-code and
+    //     password-login routes);
     //  3. email verified (skipped on GET /auth/me; a patient signed in
-    //     with a doctor-issued login code counts as verified);
+    //     with a doctor-issued login code, or their password, counts as verified);
     //  4. the role check;
     //  5. the per-user limits, keyed on the identity from step 2.
     { provide: APP_GUARD, useClass: IpThrottlerGuard },

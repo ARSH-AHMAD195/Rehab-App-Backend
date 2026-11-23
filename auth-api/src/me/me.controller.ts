@@ -18,6 +18,8 @@ interface MeResponse {
   email: string | null;
   emailVerified: boolean;
   loginMethod: LoginMethod;
+  /** Patients: whether they have set a password yet (issue #20). null for staff, whose passwords are in Firebase. */
+  hasPassword: boolean | null;
   active: boolean;
 }
 
@@ -39,7 +41,11 @@ export class MeController {
     description: 'Works while the email is unverified, so the app can show the "verify your email" screen.',
   })
   @ApiOkResponse({ type: MeResponseDoc })
-  me(@CurrentUser() user: AuthUser): MeResponse {
+  async me(@CurrentUser() user: AuthUser): Promise<MeResponse> {
+    const hasPassword =
+      user.role === ROLES.PATIENT
+        ? Boolean((await this.users.model.findById(user.id, { passwordHash: 1 }).lean())?.passwordHash)
+        : null;
     return {
       id: user.id,
       role: user.role,
@@ -47,6 +53,7 @@ export class MeController {
       email: user.email,
       emailVerified: user.emailVerified,
       loginMethod: user.loginMethod,
+      hasPassword,
       // The guard only lets active users through.
       active: true,
     };

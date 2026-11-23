@@ -35,7 +35,7 @@ describe('Nutrition (diet chart and meal logging)', () => {
     expect(res.body).toMatchObject({
       patientId: patient.id,
       dietType: 'HIGH_CALORIE_HIGH_PROTEIN',
-      dietLabel: { en: 'High-calorie, High-protein Diet for Cancer Patients', hi: null },
+      dietLabel: { en: 'High-calorie, high-protein diet', hi: null },
       targets: { kcal: 2206, proteinG: 82.4 },
       version: 0,
       updatedBy: null,

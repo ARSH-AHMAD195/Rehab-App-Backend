@@ -24,6 +24,39 @@ describe('Medical profile', () => {
     patient = await t.seed({ role: 'PATIENT', name: 'Rajesh Iyer', doctorIds: [doctor.id] });
   });
 
+  describe("doctors' notes (issue #23)", () => {
+    const NOTE = 'Discussed stopping aspirin 5 days before surgery.';
+
+    it('a doctor writes and reads them; the patient never sees them, not even after their own save', async () => {
+      const saved = await api().patch(theirs()).set('Authorization', t.auth(doctor)).send({ version: 0, clinicalNotes: ` ${NOTE} ` }).expect(200);
+      expect(saved.body.clinicalNotes).toBe(NOTE);
+      const read = await api().get(theirs()).set('Authorization', t.auth(otherDoctor)).expect(200);
+      expect(read.body.clinicalNotes).toBe(NOTE);
+
+      const own = await api().get(mine).set('Authorization', t.auth(patient)).expect(200);
+      expect(own.body).not.toHaveProperty('clinicalNotes');
+      expect(JSON.stringify(own.body)).not.toContain('aspirin');
+
+      const ownSave = await api().patch(mine).set('Authorization', t.auth(patient)).send({ version: 1, heightCm: 170 }).expect(200);
+      expect(ownSave.body).not.toHaveProperty('clinicalNotes');
+      // Still there for the doctors.
+      expect((await api().get(theirs()).set('Authorization', t.auth(doctor)).expect(200)).body.clinicalNotes).toBe(NOTE);
+    });
+
+    it('a patient cannot write them', async () => {
+      const res = await api().patch(mine).set('Authorization', t.auth(patient)).send({ version: 0, clinicalNotes: 'mine' }).expect(403);
+      expect(res.body.code).toBe('FORBIDDEN_ROLE');
+      expect(await t.connection.collection('medicalProfiles').countDocuments({})).toBe(0);
+    });
+
+    it('up to 2000 characters, and audited', async () => {
+      await api().patch(theirs()).set('Authorization', t.auth(doctor)).send({ version: 0, clinicalNotes: 'x'.repeat(2001) }).expect(400);
+      await api().patch(theirs()).set('Authorization', t.auth(doctor)).send({ version: 0, clinicalNotes: NOTE }).expect(200);
+      const audit = await t.connection.collection('auditLogs').findOne({ action: 'MEDICAL_PROFILE_UPDATED' });
+      expect(audit).toMatchObject({ actorRole: 'DOCTOR', after: { clinicalNotes: NOTE } });
+    });
+  });
+
   it('is empty with version 0 before the first save', async () => {
     const res = await api().get(mine).set('Authorization', t.auth(patient)).expect(200);
     expect(res.body).toMatchObject({ patientId: patient.id, dateOfBirth: null, comorbidities: null, version: 0, updatedBy: null });

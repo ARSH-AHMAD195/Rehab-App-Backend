@@ -55,6 +55,61 @@ describe('Doctor endpoints and the alert lifecycle (v1.1 /doctor)', () => {
   const save = (readings: Record<string, unknown>) =>
     as(patient, 'put', '/api/v1/me/vitals/today').send({ date: today(), readings }).expect(200);
 
+  describe('PUT /doctor/patients/:patientId/vitals/today (issue #25)', () => {
+    const enter = (readings: Record<string, unknown>, by: TestUser = doctor, patientId = patient.id, date = today()) =>
+      as(by, 'put', `/api/v1/doctor/patients/${patientId}/vitals/today`).send({ date, readings });
+
+    it("saves into the patient's own log, which the patient then sees, marked as entered by the doctor", async () => {
+      const res = await enter({ PULSE: { num: 128 }, BP: { systolic: 150, diastolic: 95 } }).expect(200);
+      expect(res.body).toMatchObject({ date: today(), filledCount: 3, alerts: [] });
+      expect(res.body.readings.PULSE).toMatchObject({ value: { num: 128 }, enteredBy: { id: doctor.id, role: 'DOCTOR' } });
+
+      // The patient adds more on the same day; each reading keeps who entered it.
+      await save({ PAIN: { num: 2 } });
+      const mine = await as(patient, 'get', '/api/v1/me/vitals/today').expect(200);
+      expect(mine.body.filledCount).toBe(4);
+      expect(mine.body.readings.PULSE.enteredBy).toEqual({ id: doctor.id, role: 'DOCTOR' });
+      expect(mine.body.readings.PAIN.enteredBy).toEqual({ id: patient.id, role: 'PATIENT' });
+    });
+
+    it('is audited as the doctor, and raises vital alerts like the patient own readings', async () => {
+      await setLimit({ field: null, low: null, high: 6, severity: 'MEDIUM' });
+      const res = await enter({ PAIN: { num: 7 } }, otherDoctor).expect(200);
+      expect(res.body.alerts).toHaveLength(1);
+
+      const audit = await ctx.connection.collection('auditLogs').findOne({ action: 'VITALS_VALUE_CHANGED' });
+      expect(audit).toMatchObject({ actorRole: 'DOCTOR', after: { PAIN: { num: 7 } } });
+      expect(String(audit!.actorId)).toBe(otherDoctor.id);
+    });
+
+    it("uses the patient's today and the same checks as the patient's save", async () => {
+      const yesterday = DateTime.fromISO(today()).minus({ days: 1 }).toISODate()!;
+      const late = await enter({ PULSE: { num: 80 } }, doctor, patient.id, yesterday).expect(409);
+      expect(late.body.code).toBe(ERROR_CODES.DAY_CHANGED);
+      const wrong = await enter({ PULSE: { num: 900 } }).expect(400);
+      expect(wrong.body.code).toBe(ERROR_CODES.VALIDATION_FAILED);
+    });
+
+    it('retries with the same Idempotency-Key get the first answer back', async () => {
+      const first = await as(doctor, 'put', `/api/v1/doctor/patients/${patient.id}/vitals/today`)
+        .set('Idempotency-Key', 'doc-save-1')
+        .send({ date: today(), readings: { PULSE: { num: 90 } } })
+        .expect(200);
+      const again = await as(doctor, 'put', `/api/v1/doctor/patients/${patient.id}/vitals/today`)
+        .set('Idempotency-Key', 'doc-save-1')
+        .send({ date: today(), readings: { PULSE: { num: 90 } } })
+        .expect(200);
+      expect(again.body).toEqual(first.body);
+      expect(await ctx.connection.collection('auditLogs').countDocuments({ action: 'VITALS_VALUE_CHANGED' })).toBe(1);
+    });
+
+    it('doctors only; 404 for an unknown patient', async () => {
+      await enter({ PULSE: { num: 80 } }, patient).expect(403);
+      await enter({ PULSE: { num: 80 } }, admin).expect(403);
+      await enter({ PULSE: { num: 80 } }, doctor, new Types.ObjectId().toHexString()).expect(404);
+    });
+  });
+
   describe('GET /doctor/patients/:patientId/vitals/*', () => {
     it("returns the patient's log in the same shape as /me", async () => {
       await save({ PULSE: { num: 76 } });

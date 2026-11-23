@@ -121,6 +121,7 @@ describe('Patient vitals (v1.1 /me/vitals)', () => {
         unit: 'bpm',
         status: READING_STATUS.NOT_YET,
         loggedAt: null,
+        enteredBy: null,
       });
     });
 
