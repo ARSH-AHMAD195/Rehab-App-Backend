@@ -23,6 +23,13 @@ export class ReadingResponse {
   @ApiProperty({ nullable: true, example: '2026-10-09T07:05:00+05:30' })
   loggedAt!: string | null;
 
+  @ApiProperty({
+    nullable: true,
+    example: { id: '665f0c...', role: 'DOCTOR' },
+    description: 'Who entered it: the patient, or a doctor for them. null when not logged, or saved before this was recorded.',
+  })
+  enteredBy!: { id: string; role: string } | null;
+
   @ApiPropertyOptional({ description: 'MOOD only: the level label.', example: 'Good' })
   label?: string | null;
 }
@@ -103,6 +110,7 @@ function toReadingResponse(
     unit: stored?.unit ?? def.unit,
     status: stored?.status ?? READING_STATUS.NOT_YET,
     loggedAt: day.toLocalIso(stored?.loggedAt ?? null, timeZone),
+    enteredBy: stored?.enteredBy ? { id: String(stored.enteredBy.id), role: stored.enteredBy.role } : null,
   };
 
   if (def.valueKind === VALUE_KINDS.SCALE && def.type === 'MOOD') {

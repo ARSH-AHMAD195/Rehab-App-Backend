@@ -35,9 +35,17 @@ export class MeResponseDoc {
   @ApiProperty({ description: 'false until the user clicks the link in the verification email' }) emailVerified!: boolean;
   @ApiProperty({
     enum: Object.values(LOGIN_METHODS),
-    description: 'LOGIN_CODE: signed in with a doctor-issued code. Such a patient has no email to verify, so skip the "verify your email" screen.',
+    description:
+      'LOGIN_CODE: signed in with a doctor-issued code. PASSWORD: staff email and password, or a patient phone and password. ' +
+      'A patient signed in either way has no email to verify, so skip the "verify your email" screen.',
   })
   loginMethod!: string;
+  @ApiProperty({
+    type: Boolean,
+    nullable: true,
+    description: 'Patients: whether they have set a password. false after a code sign-in: ask them to set one (PUT /users/me/password). null for staff.',
+  })
+  hasPassword!: boolean | null;
   @ApiProperty({ description: 'Always true: a switched-off user gets 401 instead' }) active!: boolean;
 }
 
@@ -149,6 +157,8 @@ export class MedicalProfileResponseDoc {
   @ApiProperty({ type: [String], nullable: true, example: ['Type 2 diabetes'] }) comorbidities!: string[] | null;
   @ApiProperty({ type: [String], nullable: true, example: ['Penicillin'] }) allergies!: string[] | null;
   @ApiProperty({ type: [String], nullable: true, example: ['Metformin 500 mg twice daily'] }) medications!: string[] | null;
+  @ApiPropertyOptional({ type: String, nullable: true, description: "Doctors' notes. Only in doctors' responses; never sent to the patient." })
+  clinicalNotes?: string | null;
   @ApiProperty({ enum: SMOKING_STATUSES, nullable: true }) smokingStatus!: string | null;
   @ApiProperty({ type: EmergencyContactDoc, nullable: true }) emergencyContact!: EmergencyContactDoc | null;
   @ApiProperty({ type: String, nullable: true, example: '2026-10-23' }) programmeStartDate!: string | null;

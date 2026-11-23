@@ -136,6 +136,11 @@ and `heightCm`, 1 decimal) and `daysToSurgery` (from `plannedSurgeryDate`, in th
 time zone; negative once surgery has passed). `GET /patients` shows each patient's
 `plannedSurgeryDate` and `daysToSurgery`.
 
+**Doctors' notes (issue #23):** `clinicalNotes`, free text up to 2000 characters, for the doctors'
+own notes about the patient. Doctors only: it is left out of everything the patient gets (the key is
+not even there), and a patient sending it gets `403`. `medications`, which the patient sees, stays
+for the medicines themselves.
+
 ### 5. Health Monitoring compatibility
 `users` keeps every field Health Monitoring reads (`firebaseUid`, `role`, `name`, `timeZone`,
 `doctorIds`, `active`) with the same meaning. Once both modules are merged, Health Monitoring's
@@ -192,6 +197,23 @@ A code-login patient has no email to verify: `GET /auth/me` returns `loginMethod
 (so the app skips the "verify your email" screen), and all three APIs accept them. This only
 holds for patients: only this API can make custom tokens, and it makes them only for patients.
 
+**Patient passwords (issue #20).** Asking the doctor for a code every time was too much, so a code
+is now for the first sign-in and for resets only:
+
+1. First sign-in with a code (above). `GET /auth/me` shows `hasPassword: false`.
+2. In that same session: `PUT /users/me/password { password }`, at least 6 characters. Only a
+   session that started from a code may set one (`403 LOGIN_CODE_SESSION_REQUIRED` otherwise).
+3. From then on: `POST /auth/password-login { phone, password }` → `{ customToken }`, used like the
+   code's. `GET /auth/me` then shows `loginMethod: "PASSWORD"`.
+4. Forgot it: ask the doctor for a code, sign in with it, set a new password.
+
+Only a scrypt hash is stored on the patient's `users` record (no email needed; staff passwords stay
+in Firebase); the password is never logged or sent back. Every failure is the same
+`401 INVALID_CREDENTIALS`. After 5 wrong passwords in a row, password sign-in is locked for 15
+minutes (a code still works, and setting a new password clears the lock). Setting a password,
+signing in with it and being locked out are audited. Not done: signing the patient out of their
+other phones when the password changes.
+
 Registration: a patient needs a phone number, an email or both. Phone only →
 `invitation: "NOT_NEEDED"` and no email. A patient's phone number is unique among patients
 (`409 PHONE_ALREADY_EXISTS`); doctors and admins may share one.
@@ -221,8 +243,12 @@ Blood group is not here: it is already on the medical profile.
   approved range also flags older results. An abnormal ECG is always flagged.
 - The `min`/`max` on each field only catch typing mistakes (Hb 110 instead of 11.0); they are
   not clinical limits.
-- Doctors only (any patient), like the medical profile. Reads and changes are audited, and a
-  read that can't be audited fails.
+- Doctors read and add results (any patient), like the medical profile. Reads and changes are
+  audited, and a read that can't be audited fails.
+- **Patients see their own** (issue #19): `GET /patients/me/investigations`, read only, the same
+  shape as the doctor's grid, without retracted results. They can read `GET /investigation-tests`
+  for the units. `flags` are sent; whether to show them to patients in red is the app's choice
+  until the client decides.
 
 Waiting on the client: the normal ranges (and whether they differ by age or sex), the eGFR formula
 (creatinine is stored, eGFR is not worked out yet), and what "Free text medication assigned" means.

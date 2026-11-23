@@ -88,6 +88,30 @@ export class InvalidLoginCodeException extends ApiException {
   }
 }
 
+/**
+ * Patient password sign-in: one answer for an unknown number, no password set
+ * yet, a wrong password, or a locked one, so nothing is given away.
+ */
+export class InvalidCredentialsException extends ApiException {
+  constructor() {
+    super(
+      HttpStatus.UNAUTHORIZED,
+      ERROR_CODES.INVALID_CREDENTIALS,
+      'Wrong number or password. After 5 wrong tries, wait 15 minutes or ask your doctor for a login code.',
+    );
+  }
+}
+
+export class LoginCodeSessionRequiredException extends ApiException {
+  constructor() {
+    super(
+      HttpStatus.FORBIDDEN,
+      ERROR_CODES.LOGIN_CODE_SESSION_REQUIRED,
+      'Sign in with a login code from your doctor to set a new password.',
+    );
+  }
+}
+
 export class AlertAlreadyAcknowledgedException extends ApiException {
   constructor() {
     super(HttpStatus.CONFLICT, ERROR_CODES.ALERT_ALREADY_ACKNOWLEDGED, 'This alert has already been acknowledged');

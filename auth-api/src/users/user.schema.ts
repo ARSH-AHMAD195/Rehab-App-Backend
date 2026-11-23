@@ -71,6 +71,25 @@ export class User {
   @Prop({ default: 0 })
   lockVersion!: number;
 
+  /**
+   * Patients only (issue #20): their phone-and-password sign-in. Only a scrypt
+   * hash is kept (see patient-password.ts), never the password, and it is
+   * never sent out: every response picks its fields by name. Staff passwords
+   * stay in Firebase.
+   */
+  @Prop({ type: String, default: null })
+  passwordHash!: string | null;
+
+  @Prop({ type: Date, default: null })
+  passwordSetAt!: Date | null;
+
+  /** Wrong passwords in a row; reset by a right one or a new password. */
+  @Prop({ default: 0 })
+  passwordFailures!: number;
+
+  @Prop({ type: Date, default: null })
+  passwordLockedUntil!: Date | null;
+
   /** Set while a set-password email to this user is being resent; see InvitationsService.resend. */
   @Prop({ type: Date, default: null })
   invitationLockedUntil!: Date | null;

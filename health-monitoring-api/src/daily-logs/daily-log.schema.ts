@@ -12,6 +12,11 @@ export interface StoredReading {
   typeVersion: number;
   status: ReadingStatus;
   loggedAt: Date | null;
+  /**
+   * Who entered it: the patient, or a doctor entering it for them. Missing on
+   * readings saved before this was recorded; null once cleared.
+   */
+  enteredBy?: { id: Types.ObjectId; role: string } | null;
 }
 
 /**

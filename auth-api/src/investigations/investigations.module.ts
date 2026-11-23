@@ -5,6 +5,7 @@ import { InvestigationsService } from './investigations.service';
 import {
   InvestigationRangesController,
   InvestigationTestsController,
+  MyInvestigationsController,
   PatientInvestigationsController,
 } from './investigations.controller';
 
@@ -15,7 +16,8 @@ import {
       { name: InvestigationRange.name, schema: InvestigationRangeSchema },
     ]),
   ],
-  controllers: [InvestigationTestsController, PatientInvestigationsController, InvestigationRangesController],
+  // /patients/me/... must be matched before /patients/:patientId/...
+  controllers: [InvestigationTestsController, MyInvestigationsController, PatientInvestigationsController, InvestigationRangesController],
   providers: [InvestigationsService],
   exports: [InvestigationsService],
 })

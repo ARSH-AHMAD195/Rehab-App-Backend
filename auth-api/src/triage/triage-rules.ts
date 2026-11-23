@@ -106,9 +106,9 @@ export type Parameter = (typeof PARAMETERS)[number];
 export interface TriageReason {
   parameter: Parameter;
   level: Level;
-  /** What the doctor sees, e.g. "Hb 7.6 g/dL on 2026-11-08 (High: below 8)". */
+  /** What the doctor sees, e.g. "Hb 7.6 g/dL (High: below 8)". No date in it: the app formats `date`. */
   explanation: string;
-  /** The date of the value behind it, when it has one. */
+  /** The date of the value behind it (a result, a reading, quitting, an MI or stent, the last chemo), when it has one. */
   date: string | null;
 }
 
@@ -127,7 +127,6 @@ export function evaluateTriage(input: TriageInputs, rules: TriageRuleSet): Triag
   const add = (parameter: Parameter, level: Level, explanation: string, date: string | null = null) =>
     reasons.push({ parameter, level, explanation, date });
   const daysSince = (date: string) => Math.round(DateTime.fromISO(input.today).diff(DateTime.fromISO(date), 'days').days);
-  const on = (d: Dated<unknown>) => ` on ${d.date}`;
 
   // Age
   const age = ageOn(input.dateOfBirth, input.today);
@@ -137,18 +136,18 @@ export function evaluateTriage(input: TriageInputs, rules: TriageRuleSet): Triag
 
   // Haemoglobin
   if (!input.hb) missing.push({ parameter: 'HAEMOGLOBIN', needs: 'an Hb result' });
-  else if (input.hb.value < rules.hb.highBelow) add('HAEMOGLOBIN', 'HIGH', `Hb ${input.hb.value} g/dL${on(input.hb)} (High: below ${rules.hb.highBelow})`, input.hb.date);
-  else if (input.hb.value < rules.hb.mediumBelow) add('HAEMOGLOBIN', 'MEDIUM', `Hb ${input.hb.value} g/dL${on(input.hb)} (Medium: ${rules.hb.highBelow} to under ${rules.hb.mediumBelow})`, input.hb.date);
+  else if (input.hb.value < rules.hb.highBelow) add('HAEMOGLOBIN', 'HIGH', `Hb ${input.hb.value} g/dL (High: below ${rules.hb.highBelow})`, input.hb.date);
+  else if (input.hb.value < rules.hb.mediumBelow) add('HAEMOGLOBIN', 'MEDIUM', `Hb ${input.hb.value} g/dL (Medium: ${rules.hb.highBelow} to under ${rules.hb.mediumBelow})`, input.hb.date);
 
   // Albumin
   if (!input.albumin) missing.push({ parameter: 'ALBUMIN', needs: 'an albumin result' });
-  else if (input.albumin.value < rules.albumin.highBelow) add('ALBUMIN', 'HIGH', `Albumin ${input.albumin.value} g/dL${on(input.albumin)} (High: below ${rules.albumin.highBelow})`, input.albumin.date);
-  else if (input.albumin.value < rules.albumin.mediumBelow) add('ALBUMIN', 'MEDIUM', `Albumin ${input.albumin.value} g/dL${on(input.albumin)} (Medium: ${rules.albumin.highBelow} to under ${rules.albumin.mediumBelow})`, input.albumin.date);
+  else if (input.albumin.value < rules.albumin.highBelow) add('ALBUMIN', 'HIGH', `Albumin ${input.albumin.value} g/dL (High: below ${rules.albumin.highBelow})`, input.albumin.date);
+  else if (input.albumin.value < rules.albumin.mediumBelow) add('ALBUMIN', 'MEDIUM', `Albumin ${input.albumin.value} g/dL (Medium: ${rules.albumin.highBelow} to under ${rules.albumin.mediumBelow})`, input.albumin.date);
 
   // Nutrition (MUST)
   if (!input.must) missing.push({ parameter: 'NUTRITION_MUST', needs: 'a MUST score' });
-  else if (input.must.value >= rules.must.highFrom) add('NUTRITION_MUST', 'HIGH', `MUST ${input.must.value}${on(input.must)} (High: ${rules.must.highFrom} or more)`, input.must.date);
-  else if (input.must.value >= rules.must.mediumFrom) add('NUTRITION_MUST', 'MEDIUM', `MUST ${input.must.value}${on(input.must)} (Medium: ${rules.must.mediumFrom})`, input.must.date);
+  else if (input.must.value >= rules.must.highFrom) add('NUTRITION_MUST', 'HIGH', `MUST ${input.must.value} (High: ${rules.must.highFrom} or more)`, input.must.date);
+  else if (input.must.value >= rules.must.mediumFrom) add('NUTRITION_MUST', 'MEDIUM', `MUST ${input.must.value} (Medium: ${rules.must.mediumFrom})`, input.must.date);
 
   // Smoking
   if (!input.smokingStatus) missing.push({ parameter: 'SMOKING', needs: 'smoking status' });
@@ -156,14 +155,14 @@ export function evaluateTriage(input: TriageInputs, rules: TriageRuleSet): Triag
   else if (input.smokingStatus === 'FORMER') {
     if (!input.smokingQuitDate) missing.push({ parameter: 'SMOKING', needs: 'the date they quit smoking' });
     else if (daysSince(input.smokingQuitDate) < rules.smoking.mediumQuitWithinDays) {
-      add('SMOKING', 'MEDIUM', `Quit smoking on ${input.smokingQuitDate}, under ${rules.smoking.mediumQuitWithinDays} days ago (Medium)`);
+      add('SMOKING', 'MEDIUM', `Quit smoking under ${rules.smoking.mediumQuitWithinDays} days ago (Medium)`, input.smokingQuitDate);
     }
   }
 
   // Hypertension: a high reading is High; controlled on medication is Medium.
   const bp = input.bloodPressure;
   if (bp && (bp.value.systolic >= rules.bloodPressure.highSystolicFrom || bp.value.diastolic >= rules.bloodPressure.highDiastolicFrom)) {
-    add('HYPERTENSION', 'HIGH', `BP ${bp.value.systolic}/${bp.value.diastolic} mmHg${on(bp)} (High: ${rules.bloodPressure.highSystolicFrom}/${rules.bloodPressure.highDiastolicFrom} or above)`, bp.date);
+    add('HYPERTENSION', 'HIGH', `BP ${bp.value.systolic}/${bp.value.diastolic} mmHg (High: ${rules.bloodPressure.highSystolicFrom}/${rules.bloodPressure.highDiastolicFrom} or above)`, bp.date);
   } else if (input.hypertensionOnMedication === true) {
     add('HYPERTENSION', 'MEDIUM', 'Hypertension controlled on medication (Medium)');
   } else {
@@ -175,23 +174,23 @@ export function evaluateTriage(input: TriageInputs, rules: TriageRuleSet): Triag
 
   // Diabetes (HbA1c). Without diabetes and without a result, there is nothing to miss.
   if (input.hba1c) {
-    if (input.hba1c.value > rules.hba1c.highAbove) add('DIABETES', 'HIGH', `HbA1c ${input.hba1c.value}%${on(input.hba1c)} (High: above ${rules.hba1c.highAbove})`, input.hba1c.date);
-    else if (input.hba1c.value >= rules.hba1c.mediumFrom) add('DIABETES', 'MEDIUM', `HbA1c ${input.hba1c.value}%${on(input.hba1c)} (Medium: ${rules.hba1c.mediumFrom}-${rules.hba1c.highAbove})`, input.hba1c.date);
+    if (input.hba1c.value > rules.hba1c.highAbove) add('DIABETES', 'HIGH', `HbA1c ${input.hba1c.value}% (High: above ${rules.hba1c.highAbove})`, input.hba1c.date);
+    else if (input.hba1c.value >= rules.hba1c.mediumFrom) add('DIABETES', 'MEDIUM', `HbA1c ${input.hba1c.value}% (Medium: ${rules.hba1c.mediumFrom}-${rules.hba1c.highAbove})`, input.hba1c.date);
   } else if (has('DM')) {
     missing.push({ parameter: 'DIABETES', needs: 'an HbA1c result' });
   }
 
   // CKD (eGFR, as the lab reports it)
   if (input.egfr) {
-    if (input.egfr.value < rules.egfr.highBelow) add('CKD', 'HIGH', `eGFR ${input.egfr.value}${on(input.egfr)} (High: below ${rules.egfr.highBelow})`, input.egfr.date);
-    else if (input.egfr.value < rules.egfr.mediumBelow) add('CKD', 'MEDIUM', `eGFR ${input.egfr.value}${on(input.egfr)} (Medium: ${rules.egfr.highBelow} to under ${rules.egfr.mediumBelow})`, input.egfr.date);
+    if (input.egfr.value < rules.egfr.highBelow) add('CKD', 'HIGH', `eGFR ${input.egfr.value} (High: below ${rules.egfr.highBelow})`, input.egfr.date);
+    else if (input.egfr.value < rules.egfr.mediumBelow) add('CKD', 'MEDIUM', `eGFR ${input.egfr.value} (Medium: ${rules.egfr.highBelow} to under ${rules.egfr.mediumBelow})`, input.egfr.date);
   } else if (has('CKD')) {
     missing.push({ parameter: 'CKD', needs: 'an eGFR result' });
   }
 
   // Ischaemic heart disease
   const recentEvent = input.lastMiOrStentDate !== null && daysSince(input.lastMiOrStentDate) <= rules.ihd.highEventWithinDays;
-  if (recentEvent) add('IHD', 'HIGH', `MI or stent on ${input.lastMiOrStentDate}, within ${rules.ihd.highEventWithinDays} days (High)`);
+  if (recentEvent) add('IHD', 'HIGH', `MI or stent within ${rules.ihd.highEventWithinDays} days (High)`, input.lastMiOrStentDate);
   else if (input.ihdStatus === 'SYMPTOMATIC') add('IHD', 'HIGH', 'Symptomatic ischaemic heart disease (High)');
   else if (input.ihdStatus === 'STABLE') add('IHD', 'MEDIUM', 'Stable ischaemic heart disease (Medium)');
   else if (has('IHD')) missing.push({ parameter: 'IHD', needs: 'whether the heart disease is stable or symptomatic' });
@@ -199,8 +198,8 @@ export function evaluateTriage(input: TriageInputs, rules: TriageRuleSet): Triag
   // Resting heart rate
   const hr = input.heartRate;
   if (!hr) missing.push({ parameter: 'RESTING_HEART_RATE', needs: `a pulse reading in the last ${rules.vitalsLookbackDays} days` });
-  else if (hr.value > rules.heartRate.highAbove) add('RESTING_HEART_RATE', 'HIGH', `Pulse ${hr.value} bpm${on(hr)} (High: over ${rules.heartRate.highAbove})`, hr.date);
-  else if (hr.value >= rules.heartRate.mediumFrom) add('RESTING_HEART_RATE', 'MEDIUM', `Pulse ${hr.value} bpm${on(hr)} (Medium: ${rules.heartRate.mediumFrom}-${rules.heartRate.highAbove})`, hr.date);
+  else if (hr.value > rules.heartRate.highAbove) add('RESTING_HEART_RATE', 'HIGH', `Pulse ${hr.value} bpm (High: over ${rules.heartRate.highAbove})`, hr.date);
+  else if (hr.value >= rules.heartRate.mediumFrom) add('RESTING_HEART_RATE', 'MEDIUM', `Pulse ${hr.value} bpm (Medium: ${rules.heartRate.mediumFrom}-${rules.heartRate.highAbove})`, hr.date);
 
   // Functional capacity
   if (input.canClimbTwoFlights === null) missing.push({ parameter: 'FUNCTIONAL_CAPACITY', needs: 'whether they can climb 2 flights of stairs' });
@@ -209,7 +208,7 @@ export function evaluateTriage(input: TriageInputs, rules: TriageRuleSet): Triag
   // Recent chemotherapy
   if (input.lastChemoDate) {
     if (daysSince(input.lastChemoDate) <= rules.recentChemo.mediumWithinDays) {
-      add('RECENT_CHEMOTHERAPY', 'MEDIUM', `Last chemotherapy on ${input.lastChemoDate}, within ${rules.recentChemo.mediumWithinDays} days (Medium)`);
+      add('RECENT_CHEMOTHERAPY', 'MEDIUM', `Last chemotherapy within ${rules.recentChemo.mediumWithinDays} days (Medium)`, input.lastChemoDate);
     }
   } else if (input.chemotherapy === true) {
     missing.push({ parameter: 'RECENT_CHEMOTHERAPY', needs: 'the date of the last chemotherapy' });

@@ -104,7 +104,7 @@ describe('Triage tag', () => {
       parameter: 'RESTING_HEART_RATE',
       level: 'HIGH',
       date: daysAgo(0),
-      explanation: `Pulse 105 bpm on ${daysAgo(0)} (High: over 100)`,
+      explanation: 'Pulse 105 bpm (High: over 100)',
     });
   });
 

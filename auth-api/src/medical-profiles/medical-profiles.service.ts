@@ -2,10 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { DateTime } from 'luxon';
 import { Model, Types } from 'mongoose';
-import { AUDIT_ACTIONS, DETAIL_CODES, Role } from '../common/constants';
+import { AUDIT_ACTIONS, DETAIL_CODES, ROLES, Role } from '../common/constants';
 import {
   ConcurrentUpdateException,
   ErrorDetail,
+  ForbiddenRoleException,
   ValidationFailedException,
 } from '../common/api.exception';
 import { TransactionRunner } from '../common/mongo/transaction.runner';
@@ -14,6 +15,7 @@ import { ageOn, bmiOf, daysUntil } from './derived';
 import { AuditService } from '../audit/audit.service';
 import { UserDocument } from '../users/user.schema';
 import {
+  DOCTOR_ONLY_FIELDS,
   MEDICAL_FIELDS,
   MedicalField,
   MedicalProfile,
@@ -47,9 +49,10 @@ export class MedicalProfilesService {
     private readonly tx: TransactionRunner,
   ) {}
 
+  /** The patient's own read: without the doctors' notes. */
   async get(patient: UserDocument): Promise<MedicalProfileResponse> {
     const profile = await this.model.findOne({ patientId: patient._id }).exec();
-    return this.toResponse(patient, profile);
+    return this.toResponse(patient, profile, ROLES.PATIENT);
   }
 
   /** A doctor's read: audited first, and a failed audit fails the call (500). */
@@ -60,7 +63,8 @@ export class MedicalProfilesService {
       patientId: patient._id,
       resourceId: String(patient._id),
     });
-    return this.get(patient);
+    const profile = await this.model.findOne({ patientId: patient._id }).exec();
+    return this.toResponse(patient, profile, doctor.role);
   }
 
   async update(
@@ -69,6 +73,9 @@ export class MedicalProfilesService {
     dto: UpdateMedicalProfileDto,
   ): Promise<MedicalProfileResponse> {
     this.assertDates(dto, patient);
+    if (actor.role === ROLES.PATIENT && DOCTOR_ONLY_FIELDS.some((field) => dto[field] !== undefined)) {
+      throw new ForbiddenRoleException(`Only doctors can change ${DOCTOR_ONLY_FIELDS.join(', ')}`);
+    }
 
     const current = await this.model.findOne({ patientId: patient._id }).exec();
     if ((current?.version ?? 0) !== dto.version) {
@@ -86,7 +93,7 @@ export class MedicalProfilesService {
       before[field] = was;
       after[field] = next;
     }
-    if (!Object.keys(after).length) return this.toResponse(patient, current);
+    if (!Object.keys(after).length) return this.toResponse(patient, current, actor.role);
 
     const updatedBy = { id: new Types.ObjectId(actor.id), role: actor.role };
     const saved = await this.tx.run(async (session) => {
@@ -122,7 +129,7 @@ export class MedicalProfilesService {
       return doc;
     }, 0);
 
-    return this.toResponse(patient, saved);
+    return this.toResponse(patient, saved, actor.role);
   }
 
   /**
@@ -163,9 +170,11 @@ export class MedicalProfilesService {
     return value === null || value === undefined ? null : JSON.parse(JSON.stringify(value));
   }
 
-  private toResponse(patient: UserDocument, profile: MedicalProfileDocument | null): MedicalProfileResponse {
+  /** `reader` is who gets it: a patient never gets the doctor-only fields, not even as null. */
+  private toResponse(patient: UserDocument, profile: MedicalProfileDocument | null, reader: Role): MedicalProfileResponse {
+    const shown = reader === ROLES.PATIENT ? MEDICAL_FIELDS.filter((field) => !DOCTOR_ONLY_FIELDS.includes(field)) : MEDICAL_FIELDS;
     const fields = Object.fromEntries(
-      MEDICAL_FIELDS.map((field) => [field, this.plain(profile?.[field] ?? null)]),
+      shown.map((field) => [field, this.plain(profile?.[field] ?? null)]),
     ) as Record<MedicalField, unknown>;
     const today = this.today(patient);
 

@@ -53,7 +53,12 @@ const opt = (code: string, label: string, quantity: string, kind: OptionKind = '
 });
 
 export const DEFAULT_DIET_TYPE = 'HIGH_CALORIE_HIGH_PROTEIN';
-export const DEFAULT_DIET_LABEL = en('High-calorie, High-protein Diet for Cancer Patients');
+/**
+ * What every patient's diet page is titled until their doctor renames it. The
+ * chart comes from the hospital's cancer-patient diet, but not every patient
+ * has cancer, so the label leaves that out (issue #22).
+ */
+export const DEFAULT_DIET_LABEL = en('High-calorie, high-protein diet');
 export const DEFAULT_TARGETS: DietTargets = { kcal: 2206, proteinG: 82.4 };
 
 export const DEFAULT_DIET_SLOTS: MealSlot[] = [

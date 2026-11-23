@@ -36,6 +36,15 @@ export class FirebaseAuthGuard implements CanActivate {
       await this.users.model.updateOne({ _id: user._id }, { $set: { emailVerified: verified.emailVerified } });
     }
 
+    // A custom token says how the patient proved who they are; one without
+    // the claim was made before passwords existed, so came from a login code.
+    const viaCustomToken = verified.signInProvider === CUSTOM_SIGN_IN;
+    const loginMethod = !viaCustomToken
+      ? LOGIN_METHODS.PASSWORD
+      : verified.loginClaim === LOGIN_METHODS.PASSWORD
+        ? LOGIN_METHODS.PASSWORD
+        : LOGIN_METHODS.LOGIN_CODE;
+
     req.user = {
       id: String(user._id),
       firebaseUid: user.firebaseUid,
@@ -43,7 +52,8 @@ export class FirebaseAuthGuard implements CanActivate {
       name: user.name,
       email: user.email ?? verified.email,
       emailVerified: verified.emailVerified,
-      loginMethod: verified.signInProvider === CUSTOM_SIGN_IN ? LOGIN_METHODS.LOGIN_CODE : LOGIN_METHODS.PASSWORD,
+      loginMethod,
+      viaCustomToken,
       timeZone: user.timeZone ?? null,
       doctorIds: user.doctorIds.map(String),
     };

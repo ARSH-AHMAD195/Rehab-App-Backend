@@ -82,7 +82,7 @@ export class MeVitalsController {
     @Body() body: SaveTodayDto,
     @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<SaveLogResponse> {
-    return this.idempotency.run(patient.id, idempotencyKey, body, () => this.logs.save(patient, body));
+    return this.idempotency.run(patient.id, idempotencyKey, body, () => this.logs.save(patient, body, patient));
   }
 
   @Get('logs')

@@ -60,6 +60,13 @@ export class MedicalProfile {
   /** Functional capacity: false means under 4 METs (High). */
   @Prop({ type: Boolean, default: null }) canClimbTwoFlights!: boolean | null;
 
+  /**
+   * The doctors' own notes about the patient (issue #23). Doctors only: never
+   * sent to the patient, and the patient can't write it. medications, which
+   * the patient sees, stays for the medicines themselves.
+   */
+  @Prop({ type: String, default: null }) clinicalNotes!: string | null;
+
   /** Optimistic concurrency: PATCH sends the version it read. */
   @Prop({ required: true, default: 1 })
   version!: number;
@@ -111,6 +118,10 @@ const FIELD_SET: Record<
   ihdStatus: true,
   lastMiOrStentDate: true,
   canClimbTwoFlights: true,
+  clinicalNotes: true,
 };
+
+/** Fields only doctors read and write; left out of everything the patient gets. */
+export const DOCTOR_ONLY_FIELDS: readonly MedicalField[] = ['clinicalNotes'];
 export type MedicalField = keyof typeof FIELD_SET;
 export const MEDICAL_FIELDS = Object.keys(FIELD_SET) as MedicalField[];
