@@ -160,6 +160,63 @@ describe('Nutrition (diet chart and meal logging)', () => {
       await eat('LUNCH', ['DAL_CURD']).expect(400);
     });
 
+    describe('advice on each meal (issue #27)', () => {
+      const ADVICE = 'Add a spoon of ghee to the dal.';
+      const withAdvice = async (advice: unknown, index = 3) => {
+        const slots = (await as(patient).get('/me/diet-plan')).body.slots;
+        slots[index].advice = advice;
+        return slots;
+      };
+
+      it('the hospital chart has none', async () => {
+        const res = await as(patient).get('/me/diet-plan').expect(200);
+        expect(res.body.slots.every((s: { advice: unknown }) => s.advice === null)).toBe(true);
+      });
+
+      it('a doctor writes it trimmed; it comes back on the doctor’s plan, the patient’s plan and today’s meals', async () => {
+        const saved = await plan({ version: 0, slots: await withAdvice(`  ${ADVICE}  `) }).expect(200);
+        expect(saved.body.slots[3]).toMatchObject({ code: 'LUNCH', advice: ADVICE });
+        expect(saved.body.slots[0].advice).toBeNull();
+
+        expect((await as(doctor).get(`/doctor/patients/${patient.id}/diet-plan`).expect(200)).body.slots[3].advice).toBe(ADVICE);
+        expect((await as(patient).get('/me/diet-plan').expect(200)).body.slots[3].advice).toBe(ADVICE);
+        expect((await as(patient).get('/me/meals/today').expect(200)).body.slots[3].advice).toBe(ADVICE);
+        expect((await as(doctor).get(`/doctor/patients/${patient.id}/meals/today`).expect(200)).body.slots[3].advice).toBe(ADVICE);
+      });
+
+      it('a save that leaves it out keeps it (an older app build won’t wipe it); a new meal starts with none', async () => {
+        await plan({ version: 0, slots: await withAdvice(ADVICE) }).expect(200);
+        const slots = (await as(patient).get('/me/diet-plan')).body.slots.map(({ advice: _advice, ...slot }: { advice: unknown }) => slot);
+        slots[3].kcal = 750;
+        slots.push({ code: 'LATE_SNACK', label: { en: 'Late snack' }, window: '22:00-22:30', kcal: 50, proteinG: 2, options: [{ code: 'NUTS', label: { en: 'Nuts' }, quantity: '5', kind: 'OPTION' }] });
+
+        const res = await plan({ version: 1, slots }).expect(200);
+        expect(res.body.slots[3]).toMatchObject({ kcal: 750, advice: ADVICE });
+        expect(res.body.slots[7]).toMatchObject({ code: 'LATE_SNACK', advice: null });
+      });
+
+      it.each([['null', null], ['blank', '   ']])('%s clears it', async (_label, advice) => {
+        await plan({ version: 0, slots: await withAdvice(ADVICE) }).expect(200);
+        const res = await plan({ version: 1, slots: await withAdvice(advice) }).expect(200);
+        expect(res.body).toMatchObject({ version: 2 });
+        expect(res.body.slots[3].advice).toBeNull();
+      });
+
+      it('up to 500 characters, and audited', async () => {
+        expect((await plan({ version: 0, slots: await withAdvice('x'.repeat(501)) }).expect(400)).body.code).toBe('VALIDATION_FAILED');
+        await plan({ version: 0, slots: await withAdvice(ADVICE) }).expect(200);
+        const audit = await ctx.connection.collection('auditLogs').findOne({ action: 'DIET_PLAN_CHANGED' });
+        expect(audit?.after.slots[3].advice).toBe(ADVICE);
+      });
+
+      it('a plan saved before advice existed reads as null', async () => {
+        await plan({ version: 0, targets: { kcal: 1800, proteinG: 70 } }).expect(200);
+        await ctx.connection.collection('patientDietPlans').updateOne({}, { $unset: { 'slots.$[].advice': '' } });
+        const res = await as(patient).get('/me/diet-plan').expect(200);
+        expect(res.body.slots.every((s: { advice: unknown }) => s.advice === null)).toBe(true);
+      });
+    });
+
     it('a stale version is refused; re-sending the same change does nothing', async () => {
       await plan({ version: 0, targets: { kcal: 1800, proteinG: 70 } }).expect(200);
       expect((await plan({ version: 0, targets: { kcal: 1900, proteinG: 70 } }).expect(409)).body.code).toBe('CONCURRENT_UPDATE');

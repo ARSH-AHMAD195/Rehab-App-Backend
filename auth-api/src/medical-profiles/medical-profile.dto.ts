@@ -33,7 +33,9 @@ import { MedicalField } from './medical-profile.schema';
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DATE_ISSUE = 'must be a date as YYYY-MM-DD';
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
-const trimEach = ({ value }: { value: unknown }) =>
+/** Trimmed, and blank becomes null (nothing to show). */
+const trimToNull = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() || null : value);
+const trimEach =({ value }: { value: unknown }) =>
   Array.isArray(value) ? value.map((v) => (typeof v === 'string' ? v.trim() : v)) : value;
 
 export class EmergencyContactDto {
@@ -248,6 +250,18 @@ export class UpdateMedicalProfileDto {
   @IsString()
   @MaxLength(2000)
   clinicalNotes?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Walk 20 minutes after lunch. Take pantoprazole 40 mg before breakfast.',
+    nullable: true,
+    description:
+      'Advice or medicines for the patient (issue #27). Written by doctors, shown to the patient; a patient sending it gets 403. Blank saves null. Up to 2000 characters.',
+  })
+  @IsOptional()
+  @Transform(trimToNull)
+  @IsString()
+  @MaxLength(2000)
+  patientAdvice?: string | null;
 }
 
 // Compile-time only: the DTO's fields (besides version) are exactly the schema's MEDICAL_FIELDS.

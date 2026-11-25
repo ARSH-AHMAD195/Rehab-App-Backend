@@ -57,6 +57,54 @@ describe('Medical profile', () => {
     });
   });
 
+  describe('advice for the patient (issue #27)', () => {
+    const ADVICE = 'Walk 20 minutes after lunch.';
+
+    it('a doctor writes it trimmed; the patient sees it, while the doctors’ notes stay hidden', async () => {
+      const saved = await api()
+        .patch(theirs())
+        .set('Authorization', t.auth(doctor))
+        .send({ version: 0, patientAdvice: ` ${ADVICE} `, clinicalNotes: 'Private note.' })
+        .expect(200);
+      expect(saved.body.patientAdvice).toBe(ADVICE);
+      expect((await api().get(theirs()).set('Authorization', t.auth(otherDoctor)).expect(200)).body.patientAdvice).toBe(ADVICE);
+
+      const own = await api().get(mine).set('Authorization', t.auth(patient)).expect(200);
+      expect(own.body.patientAdvice).toBe(ADVICE);
+      expect(own.body).not.toHaveProperty('clinicalNotes');
+    });
+
+    it('is null until written', async () => {
+      expect((await api().get(mine).set('Authorization', t.auth(patient)).expect(200)).body.patientAdvice).toBeNull();
+    });
+
+    it('a patient cannot write it, not even blank', async () => {
+      for (const patientAdvice of ['mine', '', null]) {
+        const res = await api().patch(mine).set('Authorization', t.auth(patient)).send({ version: 0, patientAdvice }).expect(403);
+        expect(res.body.code).toBe('FORBIDDEN_ROLE');
+      }
+      expect(await t.connection.collection('medicalProfiles').countDocuments({})).toBe(0);
+      // Their own other fields still save
+      await api().patch(mine).set('Authorization', t.auth(patient)).send({ version: 0, heightCm: 170 }).expect(200);
+    });
+
+    it('blank or null clears it', async () => {
+      await api().patch(theirs()).set('Authorization', t.auth(doctor)).send({ version: 0, patientAdvice: ADVICE }).expect(200);
+      const blank = await api().patch(theirs()).set('Authorization', t.auth(doctor)).send({ version: 1, patientAdvice: '   ' }).expect(200);
+      expect(blank.body.patientAdvice).toBeNull();
+      await api().patch(theirs()).set('Authorization', t.auth(doctor)).send({ version: 2, patientAdvice: ADVICE }).expect(200);
+      const cleared = await api().patch(theirs()).set('Authorization', t.auth(doctor)).send({ version: 3, patientAdvice: null }).expect(200);
+      expect(cleared.body.patientAdvice).toBeNull();
+    });
+
+    it('up to 2000 characters, and audited', async () => {
+      await api().patch(theirs()).set('Authorization', t.auth(doctor)).send({ version: 0, patientAdvice: 'x'.repeat(2001) }).expect(400);
+      await api().patch(theirs()).set('Authorization', t.auth(doctor)).send({ version: 0, patientAdvice: ADVICE }).expect(200);
+      const audit = await t.connection.collection('auditLogs').findOne({ action: 'MEDICAL_PROFILE_UPDATED' });
+      expect(audit).toMatchObject({ actorRole: 'DOCTOR', after: { patientAdvice: ADVICE } });
+    });
+  });
+
   it('is empty with version 0 before the first save', async () => {
     const res = await api().get(mine).set('Authorization', t.auth(patient)).expect(200);
     expect(res.body).toMatchObject({ patientId: patient.id, dateOfBirth: null, comorbidities: null, version: 0, updatedBy: null });

@@ -159,6 +159,8 @@ export class MedicalProfileResponseDoc {
   @ApiProperty({ type: [String], nullable: true, example: ['Metformin 500 mg twice daily'] }) medications!: string[] | null;
   @ApiPropertyOptional({ type: String, nullable: true, description: "Doctors' notes. Only in doctors' responses; never sent to the patient." })
   clinicalNotes?: string | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Advice or medicines for the patient, written by doctors; the patient sees it.' })
+  patientAdvice!: string | null;
   @ApiProperty({ enum: SMOKING_STATUSES, nullable: true }) smokingStatus!: string | null;
   @ApiProperty({ type: EmergencyContactDoc, nullable: true }) emergencyContact!: EmergencyContactDoc | null;
   @ApiProperty({ type: String, nullable: true, example: '2026-10-23' }) programmeStartDate!: string | null;

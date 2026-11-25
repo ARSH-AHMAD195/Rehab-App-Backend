@@ -67,6 +67,12 @@ export class MedicalProfile {
    */
   @Prop({ type: String, default: null }) clinicalNotes!: string | null;
 
+  /**
+   * Advice or medicines for the patient (issue #27): doctors write it, the
+   * patient reads it. Separate from clinicalNotes, which patients never see.
+   */
+  @Prop({ type: String, default: null }) patientAdvice!: string | null;
+
   /** Optimistic concurrency: PATCH sends the version it read. */
   @Prop({ required: true, default: 1 })
   version!: number;
@@ -119,9 +125,12 @@ const FIELD_SET: Record<
   lastMiOrStentDate: true,
   canClimbTwoFlights: true,
   clinicalNotes: true,
+  patientAdvice: true,
 };
 
 /** Fields only doctors read and write; left out of everything the patient gets. */
 export const DOCTOR_ONLY_FIELDS: readonly MedicalField[] = ['clinicalNotes'];
+/** Fields only doctors write. The patient sees patientAdvice but can't change it. */
+export const DOCTOR_WRITTEN_FIELDS: readonly MedicalField[] = [...DOCTOR_ONLY_FIELDS, 'patientAdvice'];
 export type MedicalField = keyof typeof FIELD_SET;
 export const MEDICAL_FIELDS = Object.keys(FIELD_SET) as MedicalField[];
