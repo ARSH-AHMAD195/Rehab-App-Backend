@@ -43,6 +43,7 @@ describe('nutrition counting', () => {
       kcal: 700,
       proteinG: 25,
       options: [{ code: 'A', label: { en: 'A', hi: null }, quantity: '1', kind: 'OPTION' }],
+      advice: null,
       ...over,
     });
 

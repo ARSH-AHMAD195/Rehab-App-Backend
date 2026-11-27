@@ -37,6 +37,11 @@ export interface MealSlot {
   kcal: number;
   proteinG: number;
   options: FoodOption[];
+  /**
+   * The doctor's advice for this meal (issue #27), shown to the patient as
+   * typed (no Hindi version). null when there is none; the hospital chart has none.
+   */
+  advice: string | null;
 }
 
 export interface DietTargets {
@@ -61,7 +66,7 @@ export const DEFAULT_DIET_TYPE = 'HIGH_CALORIE_HIGH_PROTEIN';
 export const DEFAULT_DIET_LABEL = en('High-calorie, high-protein diet');
 export const DEFAULT_TARGETS: DietTargets = { kcal: 2206, proteinG: 82.4 };
 
-export const DEFAULT_DIET_SLOTS: MealSlot[] = [
+export const DEFAULT_DIET_SLOTS: MealSlot[] = ([
   {
     code: 'BEFORE_BREAKFAST',
     label: en('Before breakfast'),
@@ -154,4 +159,4 @@ export const DEFAULT_DIET_SLOTS: MealSlot[] = [
     proteinG: 4.5,
     options: [opt('MILK', 'Milk (boiled, no sugar)', '1 cup')],
   },
-];
+] as Omit<MealSlot, 'advice'>[]).map((slot) => ({ ...slot, advice: null }));

@@ -16,6 +16,7 @@ import { AuditService } from '../audit/audit.service';
 import { UserDocument } from '../users/user.schema';
 import {
   DOCTOR_ONLY_FIELDS,
+  DOCTOR_WRITTEN_FIELDS,
   MEDICAL_FIELDS,
   MedicalField,
   MedicalProfile,
@@ -73,8 +74,8 @@ export class MedicalProfilesService {
     dto: UpdateMedicalProfileDto,
   ): Promise<MedicalProfileResponse> {
     this.assertDates(dto, patient);
-    if (actor.role === ROLES.PATIENT && DOCTOR_ONLY_FIELDS.some((field) => dto[field] !== undefined)) {
-      throw new ForbiddenRoleException(`Only doctors can change ${DOCTOR_ONLY_FIELDS.join(', ')}`);
+    if (actor.role === ROLES.PATIENT && DOCTOR_WRITTEN_FIELDS.some((field) => dto[field] !== undefined)) {
+      throw new ForbiddenRoleException(`Only doctors can change ${DOCTOR_WRITTEN_FIELDS.join(', ')}`);
     }
 
     const current = await this.model.findOne({ patientId: patient._id }).exec();

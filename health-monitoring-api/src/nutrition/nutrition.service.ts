@@ -97,7 +97,7 @@ export class NutritionService {
       dietType: dto.dietType ?? current.dietType,
       dietLabel: dto.dietLabel ? { en: dto.dietLabel.en, hi: dto.dietLabel.hi ?? null } : current.dietLabel,
       targets: dto.targets ? { kcal: dto.targets.kcal, proteinG: dto.targets.proteinG } : current.targets,
-      slots: dto.slots ? (JSON.parse(JSON.stringify(dto.slots)) as MealSlot[]).map(normaliseSlot) : current.slots,
+      slots: dto.slots ? keepAdvice(JSON.parse(JSON.stringify(dto.slots)) as Partial<MealSlot>[], current.slots).map(normaliseSlot) : current.slots,
     };
     const before = { dietType: current.dietType, targets: current.targets, slots: current.slots };
     if (JSON.stringify(before) === JSON.stringify({ dietType: next.dietType, targets: next.targets, slots: next.slots }) &&
@@ -242,7 +242,8 @@ export class NutritionService {
         dietType: stored.dietType,
         dietLabel: stored.dietLabel,
         targets: stored.targets,
-        slots: stored.slots,
+        // Plans saved before meal advice existed have none
+        slots: stored.slots.map(normaliseSlot),
         version: stored.version,
         updatedAt: stored.updatedAt ?? null,
         updatedBy: stored.updatedBy ?? null,
@@ -303,11 +304,23 @@ export class NutritionService {
   }
 }
 
-/** Fills in a missing Hindi label as null, so stored slots always have the same shape. */
+/** Fills in a missing Hindi label or advice as null, so stored slots always have the same shape. */
 function normaliseSlot(slot: MealSlot): MealSlot {
   return {
     ...slot,
     label: { en: slot.label.en, hi: slot.label.hi ?? null },
     options: slot.options.map((o) => ({ ...o, label: { en: o.label.en, hi: o.label.hi ?? null } })),
+    advice: slot.advice ?? null,
   };
+}
+
+/**
+ * A save replaces the whole chart, so a meal sent without `advice` keeps the
+ * stored advice of the meal with the same code (an older app build that
+ * doesn't know about advice won't wipe it). A new meal starts with none.
+ */
+function keepAdvice(slots: Partial<MealSlot>[], current: MealSlot[]): MealSlot[] {
+  return slots.map((slot) =>
+    (slot.advice === undefined ? { ...slot, advice: current.find((c) => c.code === slot.code)?.advice ?? null } : slot) as MealSlot,
+  );
 }

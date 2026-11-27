@@ -20,6 +20,8 @@ import { IsCalendarDate } from '../time/day.service';
 import { OPTION_KINDS } from './diet-chart';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
+/** Trimmed, and blank becomes null (nothing to show). */
+const trimToNull = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() || null : value);
 const CODE = /^[A-Z0-9_]{1,40}$/;
 const CODE_ISSUE = 'must be 1-40 capital letters, digits or _';
 
@@ -116,6 +118,18 @@ export class MealSlotDto {
   @ValidateNested({ each: true })
   @Type(() => FoodOptionDto)
   options!: FoodOptionDto[];
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 'Eat slowly; add a spoon of ghee to the dal.',
+    description:
+      'Advice for this meal, shown to the patient as typed (issue #27). Up to 500 characters; null or blank clears it. Left out: the stored advice of the meal with the same code is kept.',
+  })
+  @IsOptional()
+  @Transform(trimToNull)
+  @IsString()
+  @MaxLength(500)
+  advice?: string | null;
 }
 
 export class TargetsDto {
